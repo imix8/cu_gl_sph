@@ -1,4 +1,4 @@
-1. Improve the boundary condition handling in the SPH solver.
+1. Improve the boundary condition handling in the SPH solver. Right now it is an elastic collision with a coefficient of restitution.  Need to alter it so that the boundary consists of a whole bunch of "invisble" particles that remain stationary that acts as solid cells.  The reason behind this is that the boundary is no longer a wall, but particles that the SPH cuda kernel can treat in the same fashion as the moving particles.  Makes the SPH solver more realistic.
 2. optimize sph sovler (benchmarking, timing and alg fixes, kernel, thread, gridsize)
 3. OpenGL implementation to visualize => UV Sphere or ICO Sphere that will create the indices, vertices, faces and such that an OpenGL shader will take to actually draw the sphere (input -> mesh/user_defined values, output -> frame buffer); dunp all cuda calculations to one variable (instead of dumping to .csv) and pass it to OpenGL to visualize.
 4. IM GUI => allow the user to select what input parameters they want with a window popup, before the simulation is done.
