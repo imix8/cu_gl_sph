@@ -6,3 +6,36 @@
 6. (reach goal). Apply a mesh from the points, implement raytracing so that the output looks like actual water, not just points.  Look into whether or not NVIDIA's optics library is able to do this.  If this is possible, we don't even need OpenGL.
 
 *** All throughout this process, use the metrics returned from 1. to make periodic adjustments to the sph solver to make it better***
+
+
+## Setup
+# 1. Create the folder
+mkdir -p imgui
+cd imgui
+
+# 2. Download Core ImGui files
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui.h
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui.cpp
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui_draw.cpp
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui_tables.cpp
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui_widgets.cpp
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imconfig.h
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui_internal.h
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imstb_rectpack.h
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imstb_textedit.h
+wget https://raw.githubusercontent.com/ocornut/imgui/master/imstb_truetype.h
+
+# 3. Download the Backends (Connects ImGui to GLFW and OpenGL)
+wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.h
+wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.cpp
+wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.h
+wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.cpp
+wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3_loader.h
+
+# 4. Go back to your main project folder
+cd ..
+
+# 5. Build and run
+make clean
+make 
+./simple_sph
