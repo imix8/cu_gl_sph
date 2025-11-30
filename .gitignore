@@ -1,3 +1,2 @@
 positions.csv
-sph_kernels.o
-main.o
+*.o

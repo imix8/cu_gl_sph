@@ -1,69 +1,46 @@
-# --------------------------------------------------------
-# Configuration
-# --------------------------------------------------------
-
 # Compilers
 NVCC := nvcc
 CXX  := g++
 
-# Output Executable Name
+# Output
 TARGET := simple_sph
 
-# CUDA Install Path (Adjust if your CUDA is installed elsewhere)
+# Flags
 CUDA_PATH ?= /usr/local/cuda
-
-# --------------------------------------------------------
-# Flags & Libraries
-# --------------------------------------------------------
-
-# CUDA Flags
-# -c: Compile to object file
-# -O3: Optimize
-# -std=c++14: C++ Standard
 NVCCFLAGS := -O3 -std=c++14
+# Added -I./imgui
+CXXFLAGS  := -O3 -std=c++14 -Wall -I$(CUDA_PATH)/include -I./imgui -I/usr/local/include
 
-# C++ Flags (Host)
-# We need to tell C++ where to find CUDA headers (cuda_runtime.h)
-CXXFLAGS := -O3 -std=c++14 -Wall -I$(CUDA_PATH)/include
-
-# Linker Flags
-# Link against OpenGL, GLEW, GLFW, and CUDA Runtime
+# Libraries
 LDFLAGS := -lGL -lGLEW -lglfw -lcudart
 
-# --------------------------------------------------------
 # Files
-# --------------------------------------------------------
-
-# Source files
 CUDA_SRC := sph_kernels.cu
 CPP_SRC  := main.cpp
-HEADERS  := sph_interop.h
+# ImGui Sources
+IMGUI_SRC := imgui/imgui.cpp imgui/imgui_draw.cpp imgui/imgui_tables.cpp imgui/imgui_widgets.cpp imgui/imgui_impl_glfw.cpp imgui/imgui_impl_opengl3.cpp
 
-# Object files (intermediate build files)
+# Object files
 CUDA_OBJ := sph_kernels.o
 CPP_OBJ  := main.o
+IMGUI_OBJ := $(IMGUI_SRC:.cpp=.o)
 
-# --------------------------------------------------------
-# Build Rules
-# --------------------------------------------------------
-
+# Rules
 all: $(TARGET)
 
-# Link Step: Combine C++ and CUDA objects into the final executable
-# We use NVCC to link because it handles CUDA library paths automatically
-$(TARGET): $(CPP_OBJ) $(CUDA_OBJ)
+$(TARGET): $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(LDFLAGS)
 
-# Compile C++ (Host Code)
-$(CPP_OBJ): $(CPP_SRC) $(HEADERS)
+$(CPP_OBJ): $(CPP_SRC)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Compile CUDA (Device Code)
-$(CUDA_OBJ): $(CUDA_SRC) $(HEADERS)
+$(CUDA_OBJ): $(CUDA_SRC)
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-# Cleanup
+imgui/%.o: imgui/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 clean:
-	rm -f $(TARGET) $(CPP_OBJ) $(CUDA_OBJ) positions.csv
+	rm -f $(TARGET) *.o imgui/*.o
 
 .PHONY: all clean
