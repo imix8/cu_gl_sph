@@ -8,6 +8,9 @@
 #include <iostream>
 #include <vector>
 
+#include <cuda_runtime.h>
+#include <cuda_gl_interop.h>
+
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -159,6 +162,20 @@ int main()
         glfwTerminate();
         return -1;
     }
+    // Debug info on GL driver (helps diagnose CUDA interop availability)
+    const GLubyte *vendor = glGetString(GL_VENDOR);
+    const GLubyte *renderer = glGetString(GL_RENDERER);
+    std::cout << "GL Vendor: " << (vendor ? (const char *)vendor : "?") << "\n";
+    std::cout << "GL Renderer: " << (renderer ? (const char *)renderer : "?") << "\n";
+
+    // Bind CUDA device before any CUDA runtime calls (interop stability)
+    {
+        cudaError_t cErr = cudaSetDevice(0);
+        if (cErr != cudaSuccess)
+        {
+            std::cerr << "CUDA set device failed: " << cudaGetErrorString(cErr) << std::endl;
+        }
+    }
 
     // --- ImGui Init ---
     IMGUI_CHECKVERSION();
@@ -181,6 +198,8 @@ int main()
     createSphere(sphereVerts, sphereIndices);
 
     unsigned int VAO, VBO, EBO, VBO_Inst;
+    cudaGraphicsResource *instanceVBORes = nullptr;
+    bool useInterop = true;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
@@ -206,7 +225,7 @@ int main()
 
     glEnable(GL_DEPTH_TEST);
 
-    std::vector<float> host_data;
+    std::vector<float> host_data; // no longer used for uploads; kept for sizing state
 
     // --- Loop ---
     while (!glfwWindowShouldClose(window))
@@ -249,13 +268,28 @@ int main()
 
             if (ImGui::Button("INITIALIZE & RUN", ImVec2(-1, 50)))
             {
-                initSimulation(&params);
                 host_data.resize(params.particle_count * 4);
 
                 glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
                 glBufferData(GL_ARRAY_BUFFER,
                              params.particle_count * sizeof(float) * 4, NULL,
                              GL_DYNAMIC_DRAW);
+
+                // Register instance buffer with CUDA for direct writes
+                cudaError_t cErr = cudaGraphicsGLRegisterBuffer(&instanceVBORes, VBO_Inst, cudaGraphicsRegisterFlagsWriteDiscard);
+                if (cErr != cudaSuccess)
+                {
+                    std::cerr << "cudaGraphicsGLRegisterBuffer failed: " << cudaGetErrorString(cErr) << std::endl;
+                    instanceVBORes = nullptr;
+                    useInterop = false;
+                }
+                else
+                {
+                    useInterop = true;
+                }
+
+                // Initialize CUDA simulation after interop resource is set up
+                initSimulation(&params);
 
                 // Reset Camera
                 cam_dist = 2.5f;
@@ -269,28 +303,26 @@ int main()
         else if (currentState == STATE_RUNNING)
         {
             // 1. Physics Step
-            int count = stepSimulation(host_data.data(), &params);
+            float cmin = 0.0f, cmax = 1.0f;
+            int count = 0;
+            if (useInterop && instanceVBORes)
+            {
+                count = stepSimulation(instanceVBORes, &params, &cmin, &cmax);
+            }
+            else
+            {
+                // Fallback path: compute and upload via CPU
+                count = stepSimulationFallback(host_data.data(), &params, &cmin, &cmax);
+                glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
+                glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4, host_data.data());
+            }
 
-            // 2. Upload Data
-            glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4,
-                            host_data.data());
+            // 2. Upload Data (now written directly by CUDA into VBO)
 
             // 3. Render
             glUseProgram(program);
 
-            // Auto-Contrast
-            float cmin = 1000.0f, cmax = -1000.0f;
-            for (int i = 0; i < count; i++)
-            {
-                float v = host_data[i * 4 + 3];
-                if (v < cmin)
-                    cmin = v;
-                if (v > cmax)
-                    cmax = v;
-            }
-            if (cmax - cmin < 0.001f)
-                cmax = cmin + 1.0f;
+            // Auto-Contrast from GPU-reduced values
 
             glUniform1f(glGetUniformLocation(program, "vmin"), cmin);
             glUniform1f(glGetUniformLocation(program, "vmax"), cmax);
@@ -328,6 +360,11 @@ int main()
             if (ImGui::Button("STOP / CONFIG"))
             {
                 freeSimulation();
+                if (instanceVBORes)
+                {
+                    cudaGraphicsUnregisterResource(instanceVBORes);
+                    instanceVBORes = nullptr;
+                }
                 currentState = STATE_CONFIG;
             }
 
@@ -353,6 +390,11 @@ int main()
 
     if (currentState == STATE_RUNNING)
         freeSimulation();
+    if (instanceVBORes)
+    {
+        cudaGraphicsUnregisterResource(instanceVBORes);
+        instanceVBORes = nullptr;
+    }
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
