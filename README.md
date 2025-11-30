@@ -1,41 +1,80 @@
-1. Improve the boundary condition handling in the SPH solver. Right now it is an elastic collision with a coefficient of restitution.  Need to alter it so that the boundary consists of a whole bunch of "invisble" particles that remain stationary that acts as solid cells.  The reason behind this is that the boundary is no longer a wall, but particles that the SPH cuda kernel can treat in the same fashion as the moving particles.  Makes the SPH solver more realistic.
-2. optimize sph sovler (benchmarking, timing and alg fixes, kernel, thread, gridsize)
-3. OpenGL implementation to visualize => UV Sphere or ICO Sphere that will create the indices, vertices, faces and such that an OpenGL shader will take to actually draw the sphere (input -> mesh/user_defined values, output -> frame buffer); dunp all cuda calculations to one variable (instead of dumping to .csv) and pass it to OpenGL to visualize.
-4. IM GUI => allow the user to select what input parameters they want with a window popup, before the simulation is done.
-5. Connect OpenGL and computational layer with cuda interop, so that buffers created on the GPU are shared with OpenGL, passing the CPU (tell OpenGL that it is allowed to use the same space that was allocated to the GPU, one additional header file from NVIDIA).
-6. (reach goal). Apply a mesh from the points, implement raytracing so that the output looks like actual water, not just points.  Look into whether or not NVIDIA's optics library is able to do this.  If this is possible, we don't even need OpenGL.
+# CUDA SPH Fluid Simulation
 
-*** All throughout this process, use the metrics returned from 1. to make periodic adjustments to the sph solver to make it better***
+A real-time Smoothed Particle Hydrodynamics (SPH) fluid simulation implemented in CUDA C++. The simulation is visualized using OpenGL (instanced rendering) and features an interactive configuration GUI powered by Dear ImGui.
 
+## Project Roadmap & Goals
 
-## Setup
-# 1. Create the folder
+1.  **Improve Boundary Conditions:** * Transition from elastic collision (coefficient of restitution) to a particle-based boundary system.
+    * Implement stationary "invisible" particles to act as solid cells, allowing the SPH kernel to treat boundaries identically to fluid particles for realistic pressure handling.
+2.  **Solver Optimization:** * Benchmark and optimize the SPH solver (kernel adjustments, thread/grid size tuning, algorithmic fixes).
+    * *Continuous process: Use metrics from step 1 to guide optimizations.*
+3.  **OpenGL Visualization (Implemented):** * Visualize particles using UV Spheres or ICO Spheres.
+    * Dump CUDA calculations to a variable passed to OpenGL for rendering (replacing CSV output).
+    * Input: Mesh/User defined values -> Output: Frame buffer.
+4.  **Interactive GUI (Implemented):** * Integrate Dear ImGui to allow users to select input parameters (particle count, time step, radius) via a popup window before/during simulation.
+5.  **CUDA-OpenGL Interop (Native Linux Goal):** * Connect OpenGL and the computational layer using CUDA Interop (`cudaGraphicsGLRegisterBuffer`).
+    * Share GPU buffers directly to avoid CPU round-trips (Zero-Copy). 
+    * *Note: Currently using a Host-Round-Trip method for WSL2 compatibility.*
+6.  **Raytracing (Reach Goal):** * Apply a mesh to the points and implement raytracing (potentially using NVIDIA OptiX) to render realistic water surfaces instead of point sprites.
+
+---
+
+## Dependencies
+
+Before setting up, ensure you have the necessary development libraries installed.
+
+**Ubuntu / WSL2:**
+```bash
+sudo apt-get update
+sudo apt-get install build-essential cmake libglm-dev libglew-dev libglfw3-dev
+```
+
+---
+
+## Setup & Installation
+
+The project relies on Dear ImGui for the user interface. Follow these steps to download the dependencies and build the project.
+
+1. Download ImGui Dependencies
+```bash
+# Create directory
 mkdir -p imgui
 cd imgui
 
-# 2. Download Core ImGui files
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui.h
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui.cpp
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui_draw.cpp
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui_tables.cpp
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui_widgets.cpp
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imconfig.h
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imgui_internal.h
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imstb_rectpack.h
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imstb_textedit.h
-wget https://raw.githubusercontent.com/ocornut/imgui/master/imstb_truetype.h
+# Download Core ImGui files
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imgui.h](https://raw.githubusercontent.com/ocornut/imgui/master/imgui.h)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imgui.cpp](https://raw.githubusercontent.com/ocornut/imgui/master/imgui.cpp)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imgui_draw.cpp](https://raw.githubusercontent.com/ocornut/imgui/master/imgui_draw.cpp)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imgui_tables.cpp](https://raw.githubusercontent.com/ocornut/imgui/master/imgui_tables.cpp)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imgui_widgets.cpp](https://raw.githubusercontent.com/ocornut/imgui/master/imgui_widgets.cpp)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imconfig.h](https://raw.githubusercontent.com/ocornut/imgui/master/imconfig.h)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imgui_internal.h](https://raw.githubusercontent.com/ocornut/imgui/master/imgui_internal.h)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imstb_rectpack.h](https://raw.githubusercontent.com/ocornut/imgui/master/imstb_rectpack.h)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imstb_textedit.h](https://raw.githubusercontent.com/ocornut/imgui/master/imstb_textedit.h)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/imstb_truetype.h](https://raw.githubusercontent.com/ocornut/imgui/master/imstb_truetype.h)
 
-# 3. Download the Backends (Connects ImGui to GLFW and OpenGL)
-wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.h
-wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.cpp
-wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.h
-wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.cpp
-wget https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3_loader.h
+# Download Backends (GLFW and OpenGL3)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.h](https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.h)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.cpp](https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.cpp)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.h](https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.h)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.cpp](https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.cpp)
+wget [https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3_loader.h](https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3_loader.h)
 
-# 4. Go back to your main project folder
+# Return to project root
 cd ..
+```
 
-# 5. Build and run
+2. Build and Run
+Once the dependencies are downloaded, compile and execute the simulation:
+```bash
 make clean
-make 
+make
 ./simple_sph
+```
+
+---
+
+## Controls
+- GUI: Use the setup window to configure particle count and time step.
+- Camera: Left Click + Drag to rotate. Scroll to zoom.
+- Simulation: Click START to begin physics. Click STOP/RESET to re-configure.
