@@ -2,7 +2,6 @@
 #include <GLFW/glfw3.h>
 
 #include <cmath>
-#include <cstdio>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -18,10 +17,8 @@
 enum AppState { STATE_CONFIG, STATE_RUNNING };
 AppState currentState = STATE_CONFIG;
 
-// Parameters
-int param_particles = 1024;
-float param_dt = 0.004f;
-float param_radius = 0.012f;
+// The Master Parameter Struct
+SPHParams params;
 
 // Camera
 float cam_dist = 2.5f;
@@ -30,7 +27,7 @@ float cam_pitch = 30.0f;
 float lastX = 400, lastY = 300;
 bool firstMouse = true;
 
-// ---------------- Shaders ----------------
+// ---------------- Shaders (Same as before) ----------------
 const char* vertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;      
@@ -71,9 +68,7 @@ void main() {
 }
 )";
 
-// ---------------- INPUT CALLBACKS (THE FIX) ----------------
-
-// We must declare these externs to call ImGui's functions manually
+// ---------------- Input Callbacks ----------------
 extern void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow* window, double x,
                                              double y);
 extern void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow* window, int button,
@@ -82,9 +77,7 @@ extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow* window, double xoffset,
                                           double yoffset);
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    // 1. Pass event to ImGui (CRITICAL FIX)
     ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
-
     if (firstMouse) {
         lastX = xpos;
         lastY = ypos;
@@ -94,12 +87,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     float yoffset = lastY - ypos;
     lastX = xpos;
     lastY = ypos;
-
-    // 2. Camera Logic
-    // Only rotate if:
-    // a) We are in RUNNING state (don't spin while configuring)
-    // b) ImGui doesn't want the mouse
-    // c) Left mouse button is held
     if (currentState == STATE_RUNNING && !ImGui::GetIO().WantCaptureMouse) {
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             float sensitivity = 0.5f;
@@ -110,18 +97,12 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         }
     }
 }
-
 void mouse_button_callback(GLFWwindow* window, int button, int action,
                            int mods) {
-    // 1. Pass event to ImGui (CRITICAL FIX)
     ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 }
-
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    // 1. Pass event to ImGui
     ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
-
-    // 2. Camera Zoom
     if (!ImGui::GetIO().WantCaptureMouse && currentState == STATE_RUNNING) {
         cam_dist -= (float)yoffset * 0.1f;
         if (cam_dist < 0.1f) cam_dist = 0.1f;
@@ -129,8 +110,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     }
 }
 
-// -----------------------------------------------------------
-
+// ---------------- Shader/Mesh Utils ----------------
 GLuint compileShader(GLenum type, const char* source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
@@ -174,71 +154,63 @@ void createSphere(std::vector<float>& vertices,
     }
 }
 
+// ---------------- Main ----------------
 int main() {
     if (!glfwInit()) return -1;
     const char* glsl_version = "#version 330";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
     GLFWwindow* window =
-        glfwCreateWindow(1024, 768, "SPH Configurator", NULL, NULL);
+        glfwCreateWindow(1280, 800, "SPH Simulation", NULL, NULL);
     glfwMakeContextCurrent(window);
     glewInit();
 
-    // --- IMGUI INIT ---
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    (void)io;
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // --- SET CALLBACKS (Must happen AFTER ImGui Init) ---
     glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetMouseButtonCallback(window, mouse_button_callback);  // NEW
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    // Shaders & Buffers
-    GLuint vert = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
-    GLuint frag = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
     GLuint program = glCreateProgram();
-    glAttachShader(program, vert);
-    glAttachShader(program, frag);
+    GLuint v = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
+    GLuint f = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
+    glAttachShader(program, v);
+    glAttachShader(program, f);
     glLinkProgram(program);
 
     std::vector<float> sphereVerts;
     std::vector<unsigned int> sphereIndices;
     createSphere(sphereVerts, sphereIndices);
-
-    unsigned int VAO, VBO_Mesh, EBO, VBO_Instance;
+    unsigned int VAO, VBO, EBO, VBO_Inst;
     glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO_Mesh);
+    glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
-    glGenBuffers(1, &VBO_Instance);
-
+    glGenBuffers(1, &VBO_Inst);
     glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_Mesh);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sphereVerts.size() * sizeof(float),
                  sphereVerts.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 sphereIndices.size() * sizeof(unsigned int),
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(int),
                  sphereIndices.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float),
                           (void*)0);
     glEnableVertexAttribArray(0);
 
-    std::vector<float> host_fluid_data;
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_Instance);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
                           (void*)0);
     glEnableVertexAttribArray(1);
     glVertexAttribDivisor(1, 1);
 
     glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
+
+    std::vector<float> host_data;
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -251,60 +223,76 @@ int main() {
 
         if (currentState == STATE_CONFIG) {
             ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize(ImVec2(300, 220), ImGuiCond_FirstUseEver);
-            ImGui::Begin("Simulation Setup");
-            ImGui::Text("Configure Parameters");
-            ImGui::Separator();
-            ImGui::SliderInt("Particles", &param_particles, 100, 50000);
-            ImGui::SliderFloat("Time Step", &param_dt, 0.001f, 0.01f, "%.4f");
-            ImGui::SliderFloat("Sphere Size", &param_radius, 0.005f, 0.05f);
-            ImGui::Dummy(ImVec2(0.0f, 20.0f));
+            ImGui::SetNextWindowSize(ImVec2(400, 450), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Detailed SPH Setup");
 
-            if (ImGui::Button("START SIMULATION", ImVec2(-1.0f, 40.0f))) {
-                initSimulation(param_particles);
-                host_fluid_data.resize(param_particles * 4);
-                glBindBuffer(GL_ARRAY_BUFFER, VBO_Instance);
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), "Core Settings");
+            ImGui::SliderInt("Particles", &params.particle_count, 100, 20000);
+            ImGui::SliderFloat("Time Step", &params.dt, 0.001f, 0.01f, "%.4f");
+            ImGui::SliderFloat("Visual Size", &params.visual_radius, 0.005f,
+                               0.05f);
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0, 1, 1, 1), "Physics Parameters");
+            ImGui::SliderFloat("Smooth Rad (h)", &params.h, 0.02f, 0.2f);
+            ImGui::SliderFloat("Mass", &params.mass, 0.001f, 0.1f);
+            ImGui::SliderFloat("Rest Density", &params.rest_density, 0.1f,
+                               2000.0f);
+            ImGui::SliderFloat("Stiffness (k)", &params.stiffness, 1.0f, 50.0f);
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Environment");
+            ImGui::SliderFloat("Gravity", &params.gravity, -100.0f, 100.0f);
+            ImGui::SliderFloat("Wall Damp", &params.damping, -0.99f, -0.1f);
+            ImGui::SliderFloat("Box Size", &params.box_size, 0.5f, 5.0f);
+
+            ImGui::Dummy(ImVec2(0, 20));
+            if (ImGui::Button("INITIALIZE & RUN", ImVec2(-1, 50))) {
+                initSimulation(&params);
+                host_data.resize(params.particle_count * 4);
+                glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
                 glBufferData(GL_ARRAY_BUFFER,
-                             param_particles * sizeof(float) * 4, NULL,
+                             params.particle_count * sizeof(float) * 4, NULL,
                              GL_DYNAMIC_DRAW);
                 currentState = STATE_RUNNING;
             }
             ImGui::End();
 
         } else if (currentState == STATE_RUNNING) {
-            int particles_to_draw =
-                stepSimulation(host_fluid_data.data(), param_dt);
-            glBindBuffer(GL_ARRAY_BUFFER, VBO_Instance);
-            glBufferSubData(GL_ARRAY_BUFFER, 0,
-                            particles_to_draw * sizeof(float) * 4,
-                            host_fluid_data.data());
+            // Step Physics
+            int count = stepSimulation(host_data.data(), &params);
+
+            // Render
+            glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4,
+                            host_data.data());
 
             glUseProgram(program);
 
-            float c_min = 1000.0f, c_max = -1000.0f;
-            for (int i = 0; i < particles_to_draw; i++) {
-                float v = host_fluid_data[i * 4 + 3];
-                if (v < c_min) c_min = v;
-                if (v > c_max) c_max = v;
+            // Auto-Contrast Color Logic
+            float cmin = 1000, cmax = -1000;
+            for (int i = 0; i < count; i++) {
+                float v = host_data[i * 4 + 3];
+                if (v < cmin) cmin = v;
+                if (v > cmax) cmax = v;
             }
-            if (c_max - c_min < 0.0001f) c_max = c_min + 1.0f;
+            if (cmax - cmin < 0.001) cmax = cmin + 1.0;
 
-            glUniform1f(glGetUniformLocation(program, "vmin"), c_min);
-            glUniform1f(glGetUniformLocation(program, "vmax"), c_max);
-            glUniform1f(glGetUniformLocation(program, "radius"), param_radius);
+            glUniform1f(glGetUniformLocation(program, "vmin"), cmin);
+            glUniform1f(glGetUniformLocation(program, "vmax"), cmax);
+            glUniform1f(glGetUniformLocation(program, "radius"),
+                        params.visual_radius);
 
-            glm::vec3 target(0.5f, 0.5f, 0.5f);
-            float radYaw = glm::radians(cam_yaw);
-            float radPitch = glm::radians(cam_pitch);
-            float camX = target.x + cam_dist * cos(radPitch) * cos(radYaw);
-            float camY = target.y + cam_dist * cos(radPitch) * sin(radYaw);
-            float camZ = target.z + cam_dist * sin(radPitch);
-
-            glm::mat4 view = glm::lookAt(glm::vec3(camX, camY, camZ), target,
-                                         glm::vec3(0.0f, 0.0f, 1.0f));
+            // Camera
+            glm::vec3 target(params.box_size / 2.0f, params.box_size / 2.0f,
+                             params.box_size / 2.0f);  // Look at center
+            float ry = glm::radians(cam_yaw), rp = glm::radians(cam_pitch);
+            glm::vec3 pos = target + glm::vec3(cam_dist * cos(rp) * cos(ry),
+                                               cam_dist * cos(rp) * sin(ry),
+                                               cam_dist * sin(rp));
+            glm::mat4 view = glm::lookAt(pos, target, glm::vec3(0, 0, 1));
             glm::mat4 proj = glm::perspective(glm::radians(45.0f),
-                                              1024.0f / 768.0f, 0.1f, 100.0f);
-
+                                              1280.0f / 800.0f, 0.1f, 100.0f);
             glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1,
                                GL_FALSE, glm::value_ptr(view));
             glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1,
@@ -312,18 +300,23 @@ int main() {
 
             glBindVertexArray(VAO);
             glDrawElementsInstanced(GL_TRIANGLES, sphereIndices.size(),
-                                    GL_UNSIGNED_INT, 0, particles_to_draw);
+                                    GL_UNSIGNED_INT, 0, count);
 
+            // Runtime Controls
             ImGui::SetNextWindowPos(ImVec2(10, 10));
-            ImGui::Begin("Controls", NULL,
-                         ImGuiWindowFlags_NoDecoration |
-                             ImGuiWindowFlags_AlwaysAutoResize);
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-            ImGui::Text("Particles: %d", particles_to_draw);
-            if (ImGui::Button("STOP / RESET")) {
+            ImGui::Begin("Live Controls", NULL,
+                         ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::Text("FPS: %.1f | N: %d", ImGui::GetIO().Framerate, count);
+            if (ImGui::Button("STOP / CONFIG")) {
                 freeSimulation();
                 currentState = STATE_CONFIG;
             }
+
+            ImGui::Separator();
+            ImGui::Text("Live Tuning (Tweak safely!)");
+            ImGui::SliderFloat("Gravity", &params.gravity, -50.0f, 50.0f);
+            ImGui::SliderFloat("Stiffness", &params.stiffness, 1.0f, 50.0f);
+            ImGui::SliderFloat("Damping", &params.damping, -1.0f, -0.1f);
             ImGui::End();
         }
 

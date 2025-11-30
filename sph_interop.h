@@ -1,12 +1,29 @@
 #pragma once
 #include <cuda_runtime.h>
 
-// Initialize simulation with N particles
-void initSimulation(int n_fluid);
+// A container for all our tunable parameters
+struct SPHParams {
+    int particle_count = 1024;
+    float dt = 0.004f;
+    float visual_radius = 0.012f;
 
-// Cleanup memory
+    // Physics
+    float h = 0.08f;     // Smoothing radius
+    float mass = 0.02f;  // Particle mass
+    float rest_density = 1.0f;
+    float stiffness = 4.0f;  // Gas constant (k)
+
+    // Environment
+    float damping = -0.5f;  // Wall bounce energy loss
+    float gravity = -40.0f;
+    float box_size = 1.0f;
+};
+
+// Initialize memory
+void initSimulation(SPHParams* params);
+
+// Cleanup
 void freeSimulation();
 
-// Run one physics step and copy data to the host buffer
-// Returns the number of active particles
-int stepSimulation(float* host_render_buffer, float dt);
+// Run Step
+int stepSimulation(float* host_render_buffer, SPHParams* params);
