@@ -16,8 +16,6 @@
     }
 
 const float PI = 3.14159265359f;
-// NOTE: All other global constants removed. We now use the struct.
-
 const int TYPE_FLUID = 0;
 const int TYPE_BOUNDARY = 1;
 
@@ -33,7 +31,7 @@ struct Particle {
 Particle* d_particles = nullptr;
 float4* d_render_buffer = nullptr;
 int* d_fluid_counter = nullptr;
-int allocated_particles = 0;  // Track how much GPU memory we have
+int allocated_particles = 0;
 const int BLOCK_SIZE = 256;
 
 // ---------------- Physics Kernels ----------------
@@ -71,11 +69,12 @@ __global__ void compute_density_pressure(Particle* particles, int num_particles,
     particles[i].pressure = k * (density - rest_density);
 }
 
+// UPDATE 1: Added 'radius' parameter to kernel arguments
 __global__ void compute_forces_and_integrate(Particle* particles,
                                              int num_particles, float h,
                                              float mass, float dt,
                                              float box_size, float damping,
-                                             float gravity) {
+                                             float gravity, float radius) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_particles || particles[i].type == TYPE_BOUNDARY) return;
 
@@ -119,33 +118,39 @@ __global__ void compute_forces_and_integrate(Particle* particles,
     particles[i].pos.y += particles[i].vel.y * dt;
     particles[i].pos.z += particles[i].vel.z * dt;
 
-    // Boundary with variable Damping and Box Size
-    const float eps = 1e-3f;
-    if (particles[i].pos.x < eps) {
-        particles[i].pos.x = eps;
-        particles[i].vel.x *= damping;
+    // UPDATE 2: Improved Boundary Logic
+    // We offset the wall by 'radius' so the edge of the sphere hits the wall,
+    // not the center. We only reflect velocity if the particle is actually
+    // moving INTO the wall.
+
+    // X-Axis
+    if (particles[i].pos.x < radius) {
+        particles[i].pos.x = radius;
+        if (particles[i].vel.x < 0) particles[i].vel.x *= damping;
     }
-    if (particles[i].pos.x > box_size - eps) {
-        particles[i].pos.x = box_size - eps;
-        particles[i].vel.x *= damping;
+    if (particles[i].pos.x > box_size - radius) {
+        particles[i].pos.x = box_size - radius;
+        if (particles[i].vel.x > 0) particles[i].vel.x *= damping;
     }
 
-    if (particles[i].pos.y < eps) {
-        particles[i].pos.y = eps;
-        particles[i].vel.y *= damping;
+    // Y-Axis
+    if (particles[i].pos.y < radius) {
+        particles[i].pos.y = radius;
+        if (particles[i].vel.y < 0) particles[i].vel.y *= damping;
     }
-    if (particles[i].pos.y > box_size - eps) {
-        particles[i].pos.y = box_size - eps;
-        particles[i].vel.y *= damping;
+    if (particles[i].pos.y > box_size - radius) {
+        particles[i].pos.y = box_size - radius;
+        if (particles[i].vel.y > 0) particles[i].vel.y *= damping;
     }
 
-    if (particles[i].pos.z < eps) {
-        particles[i].pos.z = eps;
-        particles[i].vel.z *= damping;
+    // Z-Axis
+    if (particles[i].pos.z < radius) {
+        particles[i].pos.z = radius;
+        if (particles[i].vel.z < 0) particles[i].vel.z *= damping;
     }
-    if (particles[i].pos.z > box_size - eps) {
-        particles[i].pos.z = box_size - eps;
-        particles[i].vel.z *= damping;
+    if (particles[i].pos.z > box_size - radius) {
+        particles[i].pos.z = box_size - radius;
+        if (particles[i].vel.z > 0) particles[i].vel.z *= damping;
     }
 }
 
@@ -166,14 +171,15 @@ __global__ void update_render_buffer_compact(Particle* particles,
 
 // ---------------- Host Functions ----------------
 void add_boundary_face(std::vector<Particle>& list, float3 start, float3 u_dir,
-                       float3 v_dir, int u_count, int v_count, float spacing) {
+                       float3 v_dir, int u_count, int v_count) {
     for (int u = 0; u < u_count; ++u) {
         for (int v = 0; v < v_count; ++v) {
             Particle p;
             p.pos = make_float3(
-                start.x + u * spacing * u_dir.x + v * spacing * v_dir.x,
-                start.y + u * spacing * u_dir.y + v * spacing * v_dir.y,
-                start.z + u * spacing * u_dir.z + v * spacing * v_dir.z);
+                start.x + u * 0.04f * u_dir.x +
+                    v * 0.04f * v_dir.x,  // Hardcoded spacing for stability
+                start.y + u * 0.04f * u_dir.y + v * 0.04f * v_dir.y,
+                start.z + u * 0.04f * u_dir.z + v * 0.04f * v_dir.z);
             p.vel = make_float3(0, 0, 0);
             p.density = 1.0f;
             p.pressure = 0;
@@ -200,9 +206,11 @@ void initSimulation(SPHParams* params) {
     std::vector<Particle> host_particles;
     int n_fluid = params->particle_count;
 
-    // Derived initialization constants
-    // We keep spacing fixed for initialization to avoid wall holes
-    const float init_spacing = 0.04f;
+    // We calculate spacing based on H, but clamp it to prevent walls from
+    // disappearing if the user sets H too low.
+    float init_spacing = params->h / 2.0f;
+    if (init_spacing < 0.01f) init_spacing = 0.01f;
+
     const float init_radius = 0.25f;
 
     // 1. Fluid
@@ -223,26 +231,28 @@ void initSimulation(SPHParams* params) {
         host_particles.push_back(p);
     }
 
-    // 2. Walls
-    int wall_steps = static_cast<int>(params->box_size / init_spacing) + 1;
+    // 2. Walls (Using fixed spacing derived above)
+    // We hardcode the spacing in add_boundary_face to simplify logic,
+    // ensuring walls are solid regardless of user params for now.
+    int wall_steps = static_cast<int>(params->box_size / 0.04f) + 1;
     add_boundary_face(host_particles, make_float3(0, 0, 0),
                       make_float3(1, 0, 0), make_float3(0, 1, 0), wall_steps,
-                      wall_steps, init_spacing);
+                      wall_steps);
     add_boundary_face(host_particles, make_float3(0, 0, params->box_size),
                       make_float3(1, 0, 0), make_float3(0, 1, 0), wall_steps,
-                      wall_steps, init_spacing);
+                      wall_steps);
     add_boundary_face(host_particles, make_float3(0, 0, 0),
                       make_float3(1, 0, 0), make_float3(0, 0, 1), wall_steps,
-                      wall_steps, init_spacing);
+                      wall_steps);
     add_boundary_face(host_particles, make_float3(0, params->box_size, 0),
                       make_float3(1, 0, 0), make_float3(0, 0, 1), wall_steps,
-                      wall_steps, init_spacing);
+                      wall_steps);
     add_boundary_face(host_particles, make_float3(0, 0, 0),
                       make_float3(0, 1, 0), make_float3(0, 0, 1), wall_steps,
-                      wall_steps, init_spacing);
+                      wall_steps);
     add_boundary_face(host_particles, make_float3(params->box_size, 0, 0),
                       make_float3(0, 1, 0), make_float3(0, 0, 1), wall_steps,
-                      wall_steps, init_spacing);
+                      wall_steps);
 
     allocated_particles = host_particles.size();
 
@@ -261,18 +271,18 @@ void initSimulation(SPHParams* params) {
 int stepSimulation(float* host_render_buffer, SPHParams* params) {
     int gridSize = (allocated_particles + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    // Pass params directly to kernels
     compute_density_pressure<<<gridSize, BLOCK_SIZE>>>(
         d_particles, allocated_particles, params->h, params->mass,
         params->stiffness, params->rest_density);
     cudaDeviceSynchronize();
 
+    // UPDATE 3: Passing 'visual_radius' to the kernel
     compute_forces_and_integrate<<<gridSize, BLOCK_SIZE>>>(
         d_particles, allocated_particles, params->h, params->mass, params->dt,
-        params->box_size, params->damping, params->gravity);
+        params->box_size, params->damping, params->gravity,
+        params->visual_radius);
     cudaDeviceSynchronize();
 
-    // Compact Output
     CHECK_CUDA(cudaMemset(d_fluid_counter, 0, sizeof(int)));
     update_render_buffer_compact<<<gridSize, BLOCK_SIZE>>>(
         d_particles, d_render_buffer, allocated_particles, d_fluid_counter);

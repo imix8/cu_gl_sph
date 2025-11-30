@@ -11,6 +11,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "shaders.h"  // <--- Include the new header
 #include "sph_interop.h"
 
 // ---------------- Application State ----------------
@@ -20,55 +21,15 @@ AppState currentState = STATE_CONFIG;
 // The Master Parameter Struct
 SPHParams params;
 
-// Camera
+// Camera Globals
 float cam_dist = 2.5f;
 float cam_yaw = -45.0f;
 float cam_pitch = 30.0f;
 float lastX = 400, lastY = 300;
 bool firstMouse = true;
 
-// ---------------- Shaders (Same as before) ----------------
-const char* vertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;      
-layout (location = 1) in vec4 aInstance; 
-uniform mat4 view;
-uniform mat4 projection;
-uniform float radius;
-out float vMag; 
-void main() {
-    vec3 worldPos = aPos * radius + aInstance.xyz; 
-    gl_Position = projection * view * vec4(worldPos, 1.0);
-    vMag = aInstance.w;
-}
-)";
-
-const char* fragmentShaderSource = R"(
-#version 330 core
-out vec4 FragColor;
-in float vMag;
-uniform float vmin;
-uniform float vmax;
-vec3 plasma(float t) {
-    t = clamp(t, 0.0, 1.0);
-    vec3 c0 = vec3(0.05, 0.03, 0.53);
-    vec3 c1 = vec3(0.50, 0.03, 0.62);
-    vec3 c2 = vec3(0.83, 0.23, 0.48);
-    vec3 c3 = vec3(0.98, 0.52, 0.19);
-    vec3 c4 = vec3(0.94, 0.98, 0.13);
-    if (t < 0.25) return mix(c0, c1, t * 4.0);
-    else if (t < 0.5) return mix(c1, c2, (t - 0.25) * 4.0);
-    else if (t < 0.75) return mix(c2, c3, (t - 0.5) * 4.0);
-    else return mix(c3, c4, (t - 0.75) * 4.0);
-}
-void main() {
-    float t = (vMag - vmin) / (vmax - vmin + 0.00001);
-    vec3 col = plasma(t);
-    FragColor = vec4(col, 1.0);
-}
-)";
-
 // ---------------- Input Callbacks ----------------
+
 extern void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow* window, double x,
                                              double y);
 extern void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow* window, int button,
@@ -78,6 +39,7 @@ extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow* window, double xoffset,
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+
     if (firstMouse) {
         lastX = xpos;
         lastY = ypos;
@@ -87,22 +49,27 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     float yoffset = lastY - ypos;
     lastX = xpos;
     lastY = ypos;
+
     if (currentState == STATE_RUNNING && !ImGui::GetIO().WantCaptureMouse) {
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             float sensitivity = 0.5f;
             cam_yaw += xoffset * sensitivity;
             cam_pitch += yoffset * sensitivity;
+
             if (cam_pitch > 89.0f) cam_pitch = 89.0f;
             if (cam_pitch < -89.0f) cam_pitch = -89.0f;
         }
     }
 }
+
 void mouse_button_callback(GLFWwindow* window, int button, int action,
                            int mods) {
     ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 }
+
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+
     if (!ImGui::GetIO().WantCaptureMouse && currentState == STATE_RUNNING) {
         cam_dist -= (float)yoffset * 0.1f;
         if (cam_dist < 0.1f) cam_dist = 0.1f;
@@ -110,20 +77,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     }
 }
 
-// ---------------- Shader/Mesh Utils ----------------
-GLuint compileShader(GLenum type, const char* source) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, NULL);
-    glCompileShader(shader);
-    GLint success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, 512, NULL, infoLog);
-        std::cerr << "SHADER ERROR: " << infoLog << std::endl;
-    }
-    return shader;
-}
+// ---------------- Mesh Utils ----------------
 
 void createSphere(std::vector<float>& vertices,
                   std::vector<unsigned int>& indices) {
@@ -157,40 +111,43 @@ void createSphere(std::vector<float>& vertices,
 // ---------------- Main ----------------
 int main() {
     if (!glfwInit()) return -1;
+
     const char* glsl_version = "#version 330";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
     GLFWwindow* window =
         glfwCreateWindow(1280, 800, "SPH Simulation", NULL, NULL);
     glfwMakeContextCurrent(window);
     glewInit();
 
+    // --- ImGui Init ---
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
+    // --- Callbacks ---
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    GLuint program = glCreateProgram();
-    GLuint v = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
-    GLuint f = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
-    glAttachShader(program, v);
-    glAttachShader(program, f);
-    glLinkProgram(program);
+    // --- Resources ---
+    // NEW: Load shaders from the separate file
+    GLuint program = createShaderProgram();
 
     std::vector<float> sphereVerts;
     std::vector<unsigned int> sphereIndices;
     createSphere(sphereVerts, sphereIndices);
+
     unsigned int VAO, VBO, EBO, VBO_Inst;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
     glGenBuffers(1, &VBO_Inst);
+
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sphereVerts.size() * sizeof(float),
@@ -202,6 +159,7 @@ int main() {
                           (void*)0);
     glEnableVertexAttribArray(0);
 
+    // Instance Buffer
     glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
                           (void*)0);
@@ -212,6 +170,7 @@ int main() {
 
     std::vector<float> host_data;
 
+    // --- Loop ---
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         glClearColor(0.95f, 0.95f, 0.95f, 1.0f);
@@ -247,52 +206,64 @@ int main() {
             ImGui::SliderFloat("Box Size", &params.box_size, 0.5f, 5.0f);
 
             ImGui::Dummy(ImVec2(0, 20));
+
             if (ImGui::Button("INITIALIZE & RUN", ImVec2(-1, 50))) {
                 initSimulation(&params);
                 host_data.resize(params.particle_count * 4);
+
                 glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
                 glBufferData(GL_ARRAY_BUFFER,
                              params.particle_count * sizeof(float) * 4, NULL,
                              GL_DYNAMIC_DRAW);
+
+                // Reset Camera
+                cam_dist = 2.5f;
+                cam_yaw = -45.0f;
+                cam_pitch = 30.0f;
+
                 currentState = STATE_RUNNING;
             }
             ImGui::End();
 
         } else if (currentState == STATE_RUNNING) {
-            // Step Physics
+            // 1. Physics Step
             int count = stepSimulation(host_data.data(), &params);
 
-            // Render
+            // 2. Upload Data
             glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
             glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4,
                             host_data.data());
 
+            // 3. Render
             glUseProgram(program);
 
-            // Auto-Contrast Color Logic
-            float cmin = 1000, cmax = -1000;
+            // Auto-Contrast
+            float cmin = 1000.0f, cmax = -1000.0f;
             for (int i = 0; i < count; i++) {
                 float v = host_data[i * 4 + 3];
                 if (v < cmin) cmin = v;
                 if (v > cmax) cmax = v;
             }
-            if (cmax - cmin < 0.001) cmax = cmin + 1.0;
+            if (cmax - cmin < 0.001f) cmax = cmin + 1.0f;
 
             glUniform1f(glGetUniformLocation(program, "vmin"), cmin);
             glUniform1f(glGetUniformLocation(program, "vmax"), cmax);
             glUniform1f(glGetUniformLocation(program, "radius"),
                         params.visual_radius);
 
-            // Camera
+            // Camera Matrices
             glm::vec3 target(params.box_size / 2.0f, params.box_size / 2.0f,
-                             params.box_size / 2.0f);  // Look at center
-            float ry = glm::radians(cam_yaw), rp = glm::radians(cam_pitch);
+                             params.box_size / 2.0f);
+            float ry = glm::radians(cam_yaw);
+            float rp = glm::radians(cam_pitch);
             glm::vec3 pos = target + glm::vec3(cam_dist * cos(rp) * cos(ry),
                                                cam_dist * cos(rp) * sin(ry),
                                                cam_dist * sin(rp));
+
             glm::mat4 view = glm::lookAt(pos, target, glm::vec3(0, 0, 1));
             glm::mat4 proj = glm::perspective(glm::radians(45.0f),
                                               1280.0f / 800.0f, 0.1f, 100.0f);
+
             glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1,
                                GL_FALSE, glm::value_ptr(view));
             glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1,
@@ -302,17 +273,24 @@ int main() {
             glDrawElementsInstanced(GL_TRIANGLES, sphereIndices.size(),
                                     GL_UNSIGNED_INT, 0, count);
 
-            // Runtime Controls
+            // 4. Runtime UI
             ImGui::SetNextWindowPos(ImVec2(10, 10));
             ImGui::Begin("Live Controls", NULL,
                          ImGuiWindowFlags_AlwaysAutoResize);
             ImGui::Text("FPS: %.1f | N: %d", ImGui::GetIO().Framerate, count);
+
             if (ImGui::Button("STOP / CONFIG")) {
                 freeSimulation();
                 currentState = STATE_CONFIG;
             }
 
             ImGui::Separator();
+            if (ImGui::Button("Reset Camera View")) {
+                cam_dist = 2.5f;
+                cam_yaw = -45.0f;
+                cam_pitch = 30.0f;
+            }
+
             ImGui::Text("Live Tuning (Tweak safely!)");
             ImGui::SliderFloat("Gravity", &params.gravity, -50.0f, 50.0f);
             ImGui::SliderFloat("Stiffness", &params.stiffness, 1.0f, 50.0f);
