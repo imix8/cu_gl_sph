@@ -58,3 +58,13 @@ make
 - GUI: Use the setup window to configure particle count and time step.
 - Camera: Left Click + Drag to rotate. Scroll to zoom.
 - Simulation: Click START to begin physics. Click STOP/RESET to re-configure.
+
+
+## Building and working on PACE-ICE
+
+Run the following commands:
+```bash
+module load cuda
+module load gcc/13.3.0
+make -j$(nproc)
+```
