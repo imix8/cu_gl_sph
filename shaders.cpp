@@ -20,13 +20,17 @@ void main() {
 }
 )";
 
+// In shaders.cpp
+
 const char* fragmentShaderSource = R"(
 #version 330 core
 out vec4 FragColor;
 in float vMag;
 uniform float vmin;
 uniform float vmax;
+uniform int colorMode; // 0 = Plasma, 1 = Blue
 
+// Existing Plasma Scheme
 vec3 plasma(float t) {
     t = clamp(t, 0.0, 1.0);
     vec3 c0 = vec3(0.05, 0.03, 0.53);
@@ -41,9 +45,30 @@ vec3 plasma(float t) {
     else return mix(c3, c4, (t - 0.75) * 4.0);
 }
 
+// NEW: Blue Ocean Scheme
+vec3 ocean(float t) {
+    t = clamp(t, 0.0, 1.0);
+    // Dark Navy -> Azure -> White (Foam)
+    vec3 c0 = vec3(0.0, 0.05, 0.2);   // Deep/Slow
+    vec3 c1 = vec3(0.0, 0.3, 0.7);    // Mid
+    vec3 c2 = vec3(0.0, 0.8, 1.0);    // Fast
+    vec3 c3 = vec3(1.0, 1.0, 1.0);    // Very Fast (Foam)
+
+    if (t < 0.33) return mix(c0, c1, t * 3.0);
+    else if (t < 0.66) return mix(c1, c2, (t - 0.33) * 3.0);
+    else return mix(c2, c3, (t - 0.66) * 3.0);
+}
+
 void main() {
     float t = (vMag - vmin) / (vmax - vmin + 0.00001);
-    vec3 col = plasma(t);
+    
+    vec3 col;
+    if (colorMode == 1) {
+        col = ocean(t);
+    } else {
+        col = plasma(t);
+    }
+    
     FragColor = vec4(col, 1.0);
 }
 )";

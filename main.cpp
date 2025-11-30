@@ -27,6 +27,7 @@ float cam_yaw = -45.0f;
 float cam_pitch = 30.0f;
 float lastX = 400, lastY = 300;
 bool firstMouse = true;
+int currentColorMode = 0;  // 0 = Plasma, 1 = Blue
 
 // ---------------- Input Callbacks ----------------
 
@@ -250,7 +251,8 @@ int main() {
             glUniform1f(glGetUniformLocation(program, "vmax"), cmax);
             glUniform1f(glGetUniformLocation(program, "radius"),
                         params.visual_radius);
-
+            glUniform1i(glGetUniformLocation(program, "colorMode"),
+                        currentColorMode);
             // Camera Matrices
             glm::vec3 target(params.box_size / 2.0f, params.box_size / 2.0f,
                              params.box_size / 2.0f);
@@ -285,6 +287,14 @@ int main() {
             }
 
             ImGui::Separator();
+
+            const char* btnLabel =
+                (currentColorMode == 0) ? "Color: PLASMA" : "Color: OCEAN BLUE";
+            if (ImGui::Button(btnLabel)) {
+                currentColorMode =
+                    !currentColorMode;  // Toggles between 0 and 1
+            }
+
             if (ImGui::Button("Reset Camera View")) {
                 cam_dist = 2.5f;
                 cam_yaw = -45.0f;
