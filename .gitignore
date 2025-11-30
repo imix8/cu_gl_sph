@@ -1,3 +1,32 @@
-positions.csv
+# Build outputs
+*.o
 simple_sph
-.vscode
+
+# CUDA build artifacts
+*.i
+*.ii
+*.gpu
+*.ptx
+*.cubin
+*.fatbin
+
+# Output data files
+positions.csv
+*.csv
+
+# ImGui user settings (DO NOT COMMIT)
+imgui.ini
+
+# ImGui library (downloaded via wget)
+imgui/
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
