@@ -1,6 +1,7 @@
 # Build outputs
 *.o
 simple_sph
+build/
 
 # CUDA build artifacts
 *.i

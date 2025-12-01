@@ -7,12 +7,14 @@ TARGET := simple_sph
 
 # Flags
 CUDA_PATH ?= /usr/local/cuda
-NVCCFLAGS := -O3 -std=c++14
+NVCCFLAGS := -O3 -std=c++14 -Iexternal/glfw-3.1.2/include -Iexternal/glm-0.9.7.1 -DGLFW_EXPOSE_NATIVE_GLX
 # Added -I./imgui
-CXXFLAGS  := -O3 -std=c++14 -Wall -I$(CUDA_PATH)/include -I./imgui -I/usr/local/include
+CXXFLAGS  := -O3 -std=c++14 -Wall -I$(CUDA_PATH)/include -I./imgui -Iexternal/glfw-3.1.2/include -Iexternal/glm-0.9.7.1 -DGLFW_EXPOSE_NATIVE_GLX
 
+GLFW_LIB := external/glfw-3.1.2/build/src
+GLFW_TARGET := $(GLFW_LIB)/libglfw3.a
 # Libraries
-LDFLAGS := -lGL -lGLEW -lglfw -lcudart
+LDFLAGS := -lGL -lGLEW -L$(GLFW_LIB) -lglfw3 -lX11 -lXi -lXrandr -lXinerama -lXcursor -lpthread -lcudart
 
 # Files
 CUDA_SRC := sph_kernels.cu
@@ -53,9 +55,16 @@ setup:
 	wget -O imgui/imgui_impl_opengl3.cpp		https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.cpp
 	wget -O imgui/imgui_impl_opengl3_loader.h 	https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3_loader.h
 
+# Build GLFW if not already built
+$(GLFW_TARGET):
+	@echo "Building GLFW..."
+	@mkdir -p external/glfw-3.1.2/build
+	@cd external/glfw-3.1.2/build && cmake .. && $(MAKE)
 
-$(TARGET): $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ)
-	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(LDFLAGS)
+$(TARGET): $(GLFW_TARGET) $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ)
+	$(NVCC) $(NVCCFLAGS) -o $@ $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ) $(LDFLAGS)
+# $(TARGET): $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ)
+# 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Generic rule for .cpp files (handles main.cpp and shaders.cpp)
 %.o: %.cpp
