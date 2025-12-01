@@ -17,6 +17,8 @@
 #include "shaders.h" // <--- Include the new header
 #include "sph_interop.h"
 
+#include "SimWindow.h"
+
 // ---------------- Application State ----------------
 enum AppState
 {
@@ -38,12 +40,9 @@ int currentColorMode = 0;  // 0 = Plasma, 1 = Blue
 
 // ---------------- Input Callbacks ----------------
 
-extern void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow *window, double x,
-                                             double y);
-extern void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow *window, int button,
-                                               int action, int mods);
-extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow *window, double xoffset,
-                                          double yoffset);
+extern void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow *window, double x, double y);
+extern void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow *window, int button, int action, int mods);
+extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow *window, double xoffset, double yoffset);
 
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
@@ -176,34 +175,12 @@ void createWireCylinder(std::vector<float>& vertices,
 // ---------------- Main ----------------
 int main()
 {
-    if (!glfwInit())
-    {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
-        return -1;
-    }
-
-    const char *glsl_version = "#version 330";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    GLFWwindow *window =
-        glfwCreateWindow(1280, 800, "SPH Simulation", NULL, NULL);
-    if (!window)
-    {
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return -1;
-    }
-    glfwMakeContextCurrent(window);
-
-    GLenum glewErr = glewInit();
-    if (glewErr != GLEW_OK)
-    {
-        std::cerr << "Failed to initialize GLEW: " << glewGetErrorString(glewErr) << std::endl;
-        glfwTerminate();
-        return -1;
-    }
+    // Create a window for the program
+    int window_width = 1280;
+    int window_height = 800;
+    SimWindow simWindow(window_width, window_height);
+    GLFWwindow *window = simWindow.getWindow();
+   
     // Debug info on GL driver (helps diagnose CUDA interop availability)
     const GLubyte *vendor = glGetString(GL_VENDOR);
     const GLubyte *renderer = glGetString(GL_RENDERER);
@@ -224,7 +201,7 @@ int main()
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(glsl_version);
+    ImGui_ImplOpenGL3_Init(simWindow.glsl_version);
 
     // --- Callbacks ---
     glfwSetCursorPosCallback(window, mouse_callback);
