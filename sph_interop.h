@@ -19,6 +19,14 @@ struct SPHParams
     float damping = -0.5f; // Wall bounce energy loss
     float gravity = -40.0f;
     float box_size = 1.0f;
+
+    // --- NEW: Interaction Parameters ---
+    int is_interacting = 0;  // 0 = false, 1 = true
+    float interact_x = 0.0f;
+    float interact_y = 0.0f;
+    float interact_z = 0.0f;
+    float interact_strength = 500.0f;  // Force magnitude
+    float interact_radius = 0.25f;     // Radius of influence
 };
 
 // Initialize memory

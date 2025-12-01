@@ -13,7 +13,7 @@ A real-time Smoothed Particle Hydrodynamics (SPH) fluid simulation implemented i
    * Input: Mesh/User defined values -> Output: Frame buffer.
 4. **Interactive GUI (Implemented):** * Integrate Dear ImGui to allow users to select input parameters (particle count, time step, radius) via a popup window before/during simulation.
 5. **CUDA-OpenGL Interop (Native Linux Goal):** * Connect OpenGL and the computational layer using CUDA Interop (`cudaGraphicsGLRegisterBuffer`).
-   * Share GPU buffers directly to avoid CPU round-trips (Zero-Copy). 
+   * Share GPU buffers directly to avoid CPU round-trips (Zero-Copy).
    * *Note: Currently using a Host-Round-Trip method for WSL2 compatibility.*
 6. **Raytracing (Reach Goal):** * Apply a mesh to the points and implement raytracing (potentially using NVIDIA OptiX) to render realistic water surfaces instead of point sprites.
 
@@ -48,7 +48,7 @@ make setup
 ```bash
 make clean
 make
-./simple_sph
+make run
 ```
 
 ---
