@@ -448,6 +448,12 @@ int main() {
                 currentState = STATE_CONFIG;
             }
 
+            if (ImGui::Button("Reset Camera View")) {
+                cam_dist = 2.5f;
+                cam_yaw = -45.0f;
+                cam_pitch = 30.0f;
+            }
+
             ImGui::Separator();
 
             const char* btnLabel =
@@ -455,12 +461,6 @@ int main() {
             if (ImGui::Button(btnLabel)) {
                 currentColorMode =
                     !currentColorMode;  // Toggles between 0 and 1
-            }
-
-            if (ImGui::Button("Reset Camera View")) {
-                cam_dist = 2.5f;
-                cam_yaw = -45.0f;
-                cam_pitch = 30.0f;
             }
 
             ImGui::Text("Live Tuning (Tweak safely!)");

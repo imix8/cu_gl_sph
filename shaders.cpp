@@ -39,10 +39,10 @@ vec3 plasma(float t) {
     vec3 c3 = vec3(0.98, 0.52, 0.19);
     vec3 c4 = vec3(0.94, 0.98, 0.13);
 
-    if (t < 0.25) return mix(c0, c1, t * 4.0);
-    else if (t < 0.5) return mix(c1, c2, (t - 0.25) * 4.0);
-    else if (t < 0.75) return mix(c2, c3, (t - 0.5) * 4.0);
-    else return mix(c3, c4, (t - 0.75) * 4.0);
+    if (t < 0.7) return mix(c0, c1, t * 4.0);
+    else if (t < 0.8) return mix(c1, c2, (t - 0.7) * 4.0);
+    else if (t < 0.9) return mix(c2, c3, (t - 0.8) * 4.0);
+    else return mix(c3, c4, (t - 0.9) * 4.0);
 }
 
 // NEW: Blue Ocean Scheme
@@ -54,9 +54,9 @@ vec3 ocean(float t) {
     vec3 c2 = vec3(0.0, 0.8, 1.0);    // Fast
     vec3 c3 = vec3(1.0, 1.0, 1.0);    // Very Fast (Foam)
 
-    if (t < 0.33) return mix(c0, c1, t * 3.0);
-    else if (t < 0.66) return mix(c1, c2, (t - 0.33) * 3.0);
-    else return mix(c2, c3, (t - 0.66) * 3.0);
+    if (t < 0.5) return mix(c0, c1, t * 3.0);
+    else if (t < 0.75) return mix(c1, c2, (t - 0.5) * 3.0);
+    else return mix(c2, c3, (t - 0.75) * 3.0);
 }
 
 void main() {

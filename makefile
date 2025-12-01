@@ -70,4 +70,7 @@ imgui/%.o: imgui/%.cpp
 clean:
 	rm -f $(TARGET) *.o imgui/*.o imgui.ini
 
+run:
+	./simple_sph
+
 .PHONY: all clean
