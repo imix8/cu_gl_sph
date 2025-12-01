@@ -58,3 +58,16 @@ make run
 - GUI: Use the setup window to configure particle count and time step.
 - Camera: Left Click + Drag to rotate. Scroll to zoom.
 - Simulation: Click START to begin physics. Click STOP/RESET to re-configure.
+
+
+## Building and working on PACE-ICE
+Before provisioning yourself a desktop on PACE-ICE, make sure the "Hardware (GPU) Rendering" option is selected.
+Also make sure that you are requesting a desktop with access to the GPU. Once you have access to the GUI, open the terminal
+and run the following commands:
+```bash
+module load cuda
+module load gcc/13.3.0
+make -j$(nproc)
+```
+
+After the program has built, run it with `vglrun -d egl ./simple_sph`
