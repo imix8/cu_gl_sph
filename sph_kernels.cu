@@ -27,14 +27,14 @@ struct Particle {
     int type;
 };
 
-// ---------------- Globals ----------------
+// Globals
 Particle* d_particles = nullptr;
 float4* d_render_buffer = nullptr;
 int* d_fluid_counter = nullptr;
 int allocated_particles = 0;
 const int BLOCK_SIZE = 256;
 
-// ---------------- Physics Kernels ----------------
+// Physics Helper Kernels
 __device__ float poly6(float r2, float h) {
     if (r2 > h * h) return 0.0f;
     float coef = 315.0f / (64.0f * PI * powf(h, 9.0f));
@@ -52,7 +52,6 @@ __global__ void compute_density_pressure(Particle* particles, int num_particles,
                                          float rest_density) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_particles || particles[i].type == TYPE_BOUNDARY) return;
-
     float density = 0.0f;
     for (int j = 0; j < num_particles; ++j) {
         float3 rij = make_float3(particles[i].pos.x - particles[j].pos.x,
@@ -69,30 +68,31 @@ __global__ void compute_density_pressure(Particle* particles, int num_particles,
     particles[i].pressure = k * (density - rest_density);
 }
 
-// UPDATE 1: Added 'radius' parameter to kernel arguments
-__global__ void compute_forces_and_integrate(Particle* particles,
-                                             int num_particles, float h,
-                                             float mass, float dt,
-                                             float box_size, float damping,
-                                             float gravity, float radius) {
+__global__ void compute_forces_and_integrate(
+    Particle* particles, int num_particles, float h, float mass, float dt,
+    float box_size, float damping, float gravity, float radius,
+    int is_interacting, float3 interact_pos, float interact_strength,
+    float interact_radius) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_particles || particles[i].type == TYPE_BOUNDARY) return;
 
     float3 f_pressure = make_float3(0.0f, 0.0f, 0.0f);
     float3 f_gravity = make_float3(0.0f, 0.0f, gravity * particles[i].density);
 
+    // [REMOVED] Force-based interaction logic was here.
+    // We now handle it as a solid boundary constraint at the end.
+
+    // SPH Forces (Standard)
     for (int j = 0; j < num_particles; ++j) {
         if (i == j) continue;
         float3 rij = make_float3(particles[i].pos.x - particles[j].pos.x,
                                  particles[i].pos.y - particles[j].pos.y,
                                  particles[i].pos.z - particles[j].pos.z);
         float r2 = rij.x * rij.x + rij.y * rij.y + rij.z * rij.z;
-
         if (r2 < h * h && r2 > 1e-12f) {
             float r = sqrtf(r2);
             float p_i = fmaxf(0.0f, particles[i].pressure);
             float p_j, rho_j;
-
             if (particles[j].type == TYPE_BOUNDARY) {
                 rho_j =
                     particles[i].density < 1.0f ? 1.0f : particles[i].density;
@@ -118,12 +118,54 @@ __global__ void compute_forces_and_integrate(Particle* particles,
     particles[i].pos.y += particles[i].vel.y * dt;
     particles[i].pos.z += particles[i].vel.z * dt;
 
-    // UPDATE 2: Improved Boundary Logic
-    // We offset the wall by 'radius' so the edge of the sphere hits the wall,
-    // not the center. We only reflect velocity if the particle is actually
-    // moving INTO the wall.
+    // ------------------------------------------------------------------
+    // SOLID INTERACTION ROD (Hard Constraint)
+    // ------------------------------------------------------------------
+    // We treat the rod exactly like a moving wall.
+    // If a particle ends up inside, we eject it and bounce its velocity.
+    if (is_interacting) {
+        // 2D Distance Check (Infinite Cylinder)
+        float2 d = make_float2(particles[i].pos.x - interact_pos.x,
+                               particles[i].pos.y - interact_pos.y);
 
-    // X-Axis
+        float dist2 = d.x * d.x + d.y * d.y;
+
+        // If particle is INSIDE the rod
+        if (dist2 < interact_radius * interact_radius && dist2 > 1e-8f) {
+            float dist = sqrtf(dist2);
+            float2 n = make_float2(d.x / dist, d.y / dist);  // Surface Normal
+
+            // 1. Position Correction (Eject to surface)
+            float overlap = interact_radius - dist;
+            particles[i].pos.x += n.x * overlap;
+            particles[i].pos.y += n.y * overlap;
+
+            // 2. Velocity Reflection (Bounce)
+            // Project velocity onto the normal
+            float v_dot_n = particles[i].vel.x * n.x + particles[i].vel.y * n.y;
+
+            // Only bounce if particle is moving TOWARDS the rod center
+            if (v_dot_n < 0.0f) {
+                // Calculate tangential and normal components
+                float2 v_n = make_float2(v_dot_n * n.x, v_dot_n * n.y);
+                float2 v_t = make_float2(particles[i].vel.x - v_n.x,
+                                         particles[i].vel.y - v_n.y);
+
+                // Apply damping to the normal component (Wall Damping)
+                // 'damping' is typically negative (e.g., -0.5), so this
+                // reflects and slows down
+                v_n.x *= damping;
+                v_n.y *= damping;
+
+                particles[i].vel.x = v_t.x + v_n.x;
+                particles[i].vel.y = v_t.y + v_n.y;
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // BOX BOUNDARIES
+    // ------------------------------------------------------------------
     if (particles[i].pos.x < radius) {
         particles[i].pos.x = radius;
         if (particles[i].vel.x < 0) particles[i].vel.x *= damping;
@@ -132,8 +174,6 @@ __global__ void compute_forces_and_integrate(Particle* particles,
         particles[i].pos.x = box_size - radius;
         if (particles[i].vel.x > 0) particles[i].vel.x *= damping;
     }
-
-    // Y-Axis
     if (particles[i].pos.y < radius) {
         particles[i].pos.y = radius;
         if (particles[i].vel.y < 0) particles[i].vel.y *= damping;
@@ -142,8 +182,6 @@ __global__ void compute_forces_and_integrate(Particle* particles,
         particles[i].pos.y = box_size - radius;
         if (particles[i].vel.y > 0) particles[i].vel.y *= damping;
     }
-
-    // Z-Axis
     if (particles[i].pos.z < radius) {
         particles[i].pos.z = radius;
         if (particles[i].vel.z < 0) particles[i].vel.z *= damping;
@@ -169,15 +207,14 @@ __global__ void update_render_buffer_compact(Particle* particles,
     }
 }
 
-// ---------------- Host Functions ----------------
+// Host functions unchanged
 void add_boundary_face(std::vector<Particle>& list, float3 start, float3 u_dir,
                        float3 v_dir, int u_count, int v_count) {
     for (int u = 0; u < u_count; ++u) {
         for (int v = 0; v < v_count; ++v) {
             Particle p;
             p.pos = make_float3(
-                start.x + u * 0.04f * u_dir.x +
-                    v * 0.04f * v_dir.x,  // Hardcoded spacing for stability
+                start.x + u * 0.04f * u_dir.x + v * 0.04f * v_dir.x,
                 start.y + u * 0.04f * u_dir.y + v * 0.04f * v_dir.y,
                 start.z + u * 0.04f * u_dir.z + v * 0.04f * v_dir.z);
             p.vel = make_float3(0, 0, 0);
@@ -190,35 +227,19 @@ void add_boundary_face(std::vector<Particle>& list, float3 start, float3 u_dir,
 }
 
 void initSimulation(SPHParams* params) {
-    if (d_particles) {
-        cudaFree(d_particles);
-        d_particles = nullptr;
-    }
-    if (d_render_buffer) {
-        cudaFree(d_render_buffer);
-        d_render_buffer = nullptr;
-    }
-    if (d_fluid_counter) {
-        cudaFree(d_fluid_counter);
-        d_fluid_counter = nullptr;
-    }
-
+    if (d_particles) cudaFree(d_particles);
+    if (d_render_buffer) cudaFree(d_render_buffer);
+    if (d_fluid_counter) cudaFree(d_fluid_counter);
     std::vector<Particle> host_particles;
     int n_fluid = params->particle_count;
-
-    // We calculate spacing based on H, but clamp it to prevent walls from
-    // disappearing if the user sets H too low.
     float init_spacing = params->h / 2.0f;
     if (init_spacing < 0.01f) init_spacing = 0.01f;
-
     const float init_radius = 0.25f;
 
-    // 1. Fluid
     for (int i = 0; i < n_fluid; ++i) {
         float theta = float(i) / n_fluid * 2 * PI;
         float phi = fmod(i, n_fluid / 8) / (n_fluid / 8) * PI;
         float r_sphere = 0.9f * init_radius * cbrtf(float(i) / n_fluid);
-
         Particle p;
         p.pos = make_float3(
             0.5f * params->box_size + r_sphere * cosf(theta) * sinf(phi),
@@ -230,10 +251,6 @@ void initSimulation(SPHParams* params) {
         p.type = TYPE_FLUID;
         host_particles.push_back(p);
     }
-
-    // 2. Walls (Using fixed spacing derived above)
-    // We hardcode the spacing in add_boundary_face to simplify logic,
-    // ensuring walls are solid regardless of user params for now.
     int wall_steps = static_cast<int>(params->box_size / 0.04f) + 1;
     add_boundary_face(host_particles, make_float3(0, 0, 0),
                       make_float3(1, 0, 0), make_float3(0, 1, 0), wall_steps,
@@ -255,7 +272,6 @@ void initSimulation(SPHParams* params) {
                       wall_steps);
 
     allocated_particles = host_particles.size();
-
     CHECK_CUDA(
         cudaMalloc(&d_particles, allocated_particles * sizeof(Particle)));
     CHECK_CUDA(cudaMemcpy(d_particles, host_particles.data(),
@@ -263,35 +279,31 @@ void initSimulation(SPHParams* params) {
                           cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMalloc(&d_render_buffer, n_fluid * sizeof(float4)));
     CHECK_CUDA(cudaMalloc(&d_fluid_counter, sizeof(int)));
-
     printf("Initialized: %d Fluids, %d Total. Box: %.1f\n", n_fluid,
            allocated_particles, params->box_size);
 }
 
 int stepSimulation(float* host_render_buffer, SPHParams* params) {
     int gridSize = (allocated_particles + BLOCK_SIZE - 1) / BLOCK_SIZE;
-
     compute_density_pressure<<<gridSize, BLOCK_SIZE>>>(
         d_particles, allocated_particles, params->h, params->mass,
         params->stiffness, params->rest_density);
     cudaDeviceSynchronize();
-
-    // UPDATE 3: Passing 'visual_radius' to the kernel
+    float3 mouse_pos =
+        make_float3(params->interact_x, params->interact_y, params->interact_z);
     compute_forces_and_integrate<<<gridSize, BLOCK_SIZE>>>(
         d_particles, allocated_particles, params->h, params->mass, params->dt,
         params->box_size, params->damping, params->gravity,
-        params->visual_radius);
+        params->visual_radius, params->is_interacting, mouse_pos,
+        params->interact_strength, params->interact_radius);
     cudaDeviceSynchronize();
-
     CHECK_CUDA(cudaMemset(d_fluid_counter, 0, sizeof(int)));
     update_render_buffer_compact<<<gridSize, BLOCK_SIZE>>>(
         d_particles, d_render_buffer, allocated_particles, d_fluid_counter);
     cudaDeviceSynchronize();
-
     int fluid_count = 0;
     CHECK_CUDA(cudaMemcpy(&fluid_count, d_fluid_counter, sizeof(int),
                           cudaMemcpyDeviceToHost));
-
     if (fluid_count > 0) {
         CHECK_CUDA(cudaMemcpy(host_render_buffer, d_render_buffer,
                               fluid_count * sizeof(float4),
