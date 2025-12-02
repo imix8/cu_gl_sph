@@ -1,7 +1,7 @@
-/* 
+/*
     Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
-    Class: ECE6122 
-    Last Date Modified: 12/1/25
+    Class: ECE6122
+    Last Date Modified: 12/2/25
     Description: Class header to house common OpenGL operations using GLFW
 */
 #pragma once
@@ -19,11 +19,11 @@ private:
 
 public:
     // Public member data
-    const char *glsl_version = "#version 330";
+    const char *glslVersion = "#version 330";
 
     // Create a glfwWindow for the program and initialize it
     SimWindow(int width, int height);
 
     // Get the window
-    GLFWwindow* getWindow();
+    GLFWwindow *getWindow();
 };

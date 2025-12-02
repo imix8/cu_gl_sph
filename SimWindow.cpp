@@ -1,7 +1,7 @@
-/* 
+/*
     Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
-    Class: ECE6122 
-    Last Date Modified: 12/1/25
+    Class: ECE6122
+    Last Date Modified: 12/2/25
     Description: Class implimentation to house common OpenGL operations using GLFW
 */
 
@@ -11,11 +11,11 @@
 
 /**
  * @brief  Constructor that initializes the necessary frameworks and creates a window to be stored in this class
- * 
+ *
  * @param  width  width of the simulation window
  * @param  height  height of the simulation window
  */
-SimWindow::SimWindow(int width, int height) 
+SimWindow::SimWindow(int width, int height)
 {
     // Init glfw
     if (!glfwInit())
@@ -49,10 +49,10 @@ SimWindow::SimWindow(int width, int height)
 
 /**
  * @brief  Get the window private member value
- * 
+ *
  * @return window of type GLFWwindow*
  */
-GLFWwindow* SimWindow::getWindow()
+GLFWwindow *SimWindow::getWindow()
 {
     return window;
 }

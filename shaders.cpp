@@ -1,7 +1,7 @@
-/* 
+/*
     Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
     Class: ECE6122
-    Last Date Modified: 12/1/25
+    Last Date Modified: 12/2/25
     Description: Shader source code for loading and coloring objects in the simulator
 */
 
@@ -12,7 +12,7 @@
 
 // ---------------- SHADER SOURCES ----------------
 // Vertex shader source code
-const char* vertexShaderSource = R"(
+const char *vertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;      
 layout (location = 1) in vec4 aInstance; 
@@ -22,18 +22,18 @@ uniform float radius;
 out float vMag; 
 void main() {
     vec3 worldPos = aPos * radius + aInstance.xyz; 
-    gl_Position = projection * view * vec4(worldPos, 1.0);
+    glPosition = projection * view * vec4(worldPos, 1.0);
     vMag = aInstance.w;
 }
 )";
 
 // Fragment shader source code to color particles based on their velocity for either blue or a "plasma"
-const char* fragmentShaderSource = R"(
+const char *fragmentShaderSource = R"(
 #version 330 core
 out vec4 FragColor;
 in float vMag;
-uniform float vmin;
-uniform float vmax;
+uniform float vMin;
+uniform float vMax;
 uniform int colorMode; // 0 = Plasma, 1 = Blue
 
 // Plasma Color Scheme
@@ -66,7 +66,7 @@ vec3 ocean(float t) {
 }
 
 void main() {
-    float t = (vMag - vmin) / (vmax - vmin + 0.00001);
+    float t = (vMag - vMin) / (vMax - vMin + 0.00001);
     
     vec3 col;
     if (colorMode == 1) {
@@ -80,14 +80,16 @@ void main() {
 )";
 
 // Compile the specified shader code
-GLuint compileShader(GLenum type, const char* source) {
+GLuint compileShader(GLenum type, const char *source)
+{
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
     glCompileShader(shader);
 
     GLint success;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
+    if (!success)
+    {
         char infoLog[512];
         glGetShaderInfoLog(shader, 512, NULL, infoLog);
         std::cerr << "SHADER ERROR ("
@@ -98,7 +100,8 @@ GLuint compileShader(GLenum type, const char* source) {
 }
 
 // Compile and link all shader code needed for the program
-GLuint createShaderProgram() {
+GLuint createShaderProgram()
+{
     GLuint program = glCreateProgram();
     GLuint v = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
     GLuint f = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);

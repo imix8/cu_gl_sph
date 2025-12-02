@@ -55,7 +55,7 @@ extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow *window, double xoffset, do
  * @param  xpos  x coordinate of the mouse
  * @param  ypos  y coordinate of the mouse
  */
-void mouse_callback(GLFWwindow *window, double xpos, double ypos)
+void mouseCallback(GLFWwindow *window, double xpos, double ypos)
 {
     // Callback object
     ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
@@ -80,13 +80,13 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
         {
             // Rotation calculations
             float sensitivity = 0.5f;
-            cam.cam_yaw += xoffset * sensitivity;
-            cam.cam_pitch += yoffset * sensitivity;
+            cam.camYaw += xoffset * sensitivity;
+            cam.camPItch += yoffset * sensitivity;
 
-            if (cam.cam_pitch > 89.0f)
-                cam.cam_pitch = 89.0f;
-            if (cam.cam_pitch < -89.0f)
-                cam.cam_pitch = -89.0f;
+            if (cam.camPItch > 89.0f)
+                cam.camPItch = 89.0f;
+            if (cam.camPItch < -89.0f)
+                cam.camPItch = -89.0f;
         }
     }
 }
@@ -94,7 +94,7 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 /**
  * @brief  Callback function for the mouse button
  */
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
 {
     ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 }
@@ -102,7 +102,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 /**
  * @brief  Callback function to zoom the camera in/out on mouse scroll
  */
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
+void scrollCallback(GLFWwindow *window, double xoffset, double yoffset)
 {
     // Callback object
     ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
@@ -110,11 +110,11 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     // Handles the calculations for zooming
     if (!ImGui::GetIO().WantCaptureMouse && currentState == STATE_RUNNING)
     {
-        cam.cam_dist -= (float)yoffset * 0.1f;
-        if (cam.cam_dist < 0.1f)
-            cam.cam_dist = 0.1f;
-        if (cam.cam_dist > 5.0f)
-            cam.cam_dist = 5.0f;
+        cam.camDist -= (float)yoffset * 0.1f;
+        if (cam.camDist < 0.1f)
+            cam.camDist = 0.1f;
+        if (cam.camDist > 5.0f)
+            cam.camDist = 5.0f;
     }
 }
 
@@ -223,9 +223,9 @@ void createWireCylinder(std::vector<float> &vertices, std::vector<unsigned int> 
 int main()
 {
     // Create a window for the program
-    int window_width = 1280;
-    int window_height = 800;
-    SimWindow simWindow(window_width, window_height);
+    int windowWidth = 1280;
+    int windowHeight = 800;
+    SimWindow simWindow(windowWidth, windowHeight);
     GLFWwindow *window = simWindow.getWindow();
 
     // Init the gui backend
@@ -247,9 +247,9 @@ int main()
     }
 
     // --- Callbacks ---
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
-    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetCursorPosCallback(window, mouseCallback);
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
+    glfwSetScrollCallback(window, scrollCallback);
 
     // --- Resources ---
     // Load shaders from the separate file
@@ -266,7 +266,7 @@ int main()
     createWireCylinder(cylVerts, cylIndices);
 
     // Set up CUDA graphics
-    unsigned int VAO, VBO, EBO, VBO_Inst;
+    unsigned int VAO, VBO, EBO, VBOInst;
     unsigned int cylVAO, cylVBO, cylEBO;
     cudaGraphicsResource *instanceVBORes = nullptr;
     bool useInterop = true;
@@ -275,7 +275,7 @@ int main()
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
-    glGenBuffers(1, &VBO_Inst);
+    glGenBuffers(1, &VBOInst);
 
     // Sphere Buffers
     glBindVertexArray(VAO);
@@ -287,7 +287,7 @@ int main()
     glEnableVertexAttribArray(0);
 
     // Instance Buffer
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
+    glBindBuffer(GL_ARRAY_BUFFER, VBOInst);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(1);
     glVertexAttribDivisor(1, 1);
@@ -325,16 +325,16 @@ int main()
         // ----------------------------------------------------
         if (currentState == STATE_CONFIG && gui.displayConfigGui())
         {
-            host_data.resize(params.particle_count * 4);
+            host_data.resize(params.particleCount * 4);
 
             // Create buffers
-            glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
+            glBindBuffer(GL_ARRAY_BUFFER, VBOInst);
             glBufferData(GL_ARRAY_BUFFER,
-                         params.particle_count * sizeof(float) * 4, NULL,
+                         params.particleCount * sizeof(float) * 4, NULL,
                          GL_DYNAMIC_DRAW);
 
             // Register instance buffer with CUDA for direct writes
-            cudaError_t cErr = cudaGraphicsGLRegisterBuffer(&instanceVBORes, VBO_Inst, cudaGraphicsRegisterFlagsWriteDiscard);
+            cudaError_t cErr = cudaGraphicsGLRegisterBuffer(&instanceVBORes, VBOInst, cudaGraphicsRegisterFlagsWriteDiscard);
             if (cErr != cudaSuccess)
             {
                 std::cerr << "cudaGraphicsGLRegisterBuffer failed: " << cudaGetErrorString(cErr) << std::endl;
@@ -363,21 +363,21 @@ int main()
             int width, height;
             glfwGetWindowSize(window, &width, &height);
 
-            glm::vec3 target(params.box_size / 2.0f, params.box_size / 2.0f, params.box_size / 2.0f);
-            float ry = glm::radians(cam.cam_yaw);
-            float rp = glm::radians(cam.cam_pitch);
+            glm::vec3 target(params.boxSize / 2.0f, params.boxSize / 2.0f, params.boxSize / 2.0f);
+            float ry = glm::radians(cam.camYaw);
+            float rp = glm::radians(cam.camPItch);
             glm::vec3 pos = target + glm::vec3(
-                                         cam.cam_dist * cos(rp) * cos(ry),
-                                         cam.cam_dist * cos(rp) * sin(ry),
-                                         cam.cam_dist * sin(rp));
+                                         cam.camDist * cos(rp) * cos(ry),
+                                         cam.camDist * cos(rp) * sin(ry),
+                                         cam.camDist * sin(rp));
 
             glm::mat4 view = glm::lookAt(pos, target, glm::vec3(0, 0, 1));
 
             glm::mat4 proj = glm::perspective(
                 glm::radians(45.0f),   // 45 degree FOV
                 (float)width / height, // aspect ratio
-                0.1f,                  // near clipping plane
-                100.0f                 // far clipping plane
+                0.1f,                  // near clipPIng plane
+                100.0f                 // far clipPIng plane
             );
 
             // ----------------------------------------------------
@@ -404,7 +404,7 @@ int main()
 
                 // Plane Equation: Z = BoxSize / 2
                 // We intersect the ray with the horizontal plane in the middle of the fluid
-                float planeZ = params.box_size * 0.5f;
+                float planeZ = params.boxSize * 0.5f;
                 glm::vec3 normal(0, 0, 1);
                 float denom = glm::dot(dir, normal);
 
@@ -417,9 +417,9 @@ int main()
                         glm::vec3 worldPos = start + dir * t;
 
                         // Clamp to box bounds
-                        params.interact_x = glm::clamp(worldPos.x, 0.0f, params.box_size);
-                        params.interact_y = glm::clamp(worldPos.y, 0.0f, params.box_size);
-                        params.interact_z = glm::clamp(worldPos.z, 0.0f, params.box_size);
+                        params.interact_x = glm::clamp(worldPos.x, 0.0f, params.boxSize);
+                        params.interact_y = glm::clamp(worldPos.y, 0.0f, params.boxSize);
+                        params.interact_z = glm::clamp(worldPos.z, 0.0f, params.boxSize);
 
                         params.is_interacting = 1;
                     }
@@ -443,7 +443,7 @@ int main()
             {
                 // Fallback path: compute and upload via CPU
                 count = stepSimulationFallback(host_data.data(), &params, &cmin, &cmax);
-                glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
+                glBindBuffer(GL_ARRAY_BUFFER, VBOInst);
                 glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4, host_data.data());
             }
 
@@ -455,7 +455,7 @@ int main()
             // Auto-Contrast from GPU-reduced values
             glUniform1f(glGetUniformLocation(program, "vmin"), cmin);
             glUniform1f(glGetUniformLocation(program, "vmax"), cmax);
-            glUniform1f(glGetUniformLocation(program, "radius"), params.visual_radius);
+            glUniform1f(glGetUniformLocation(program, "radius"), params.visualRadius);
             glUniform1i(glGetUniformLocation(program, "colorMode"), cam.currentColorMode);
 
             glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, glm::value_ptr(view));
@@ -470,7 +470,7 @@ int main()
             if (params.is_interacting)
             {
                 // Set radius uniform to the interaction radius
-                glUniform1f(glGetUniformLocation(program, "radius"), params.interact_radius);
+                glUniform1f(glGetUniformLocation(program, "radius"), params.interactRadius);
 
                 // Hack: Set vmin/vmax to 0/1, and pass a huge vMag (1000) in
                 // the attribute to force the color to the max value
@@ -486,7 +486,7 @@ int main()
                 // Draw a stack of wire cylinders to visualize the stirring column
                 for (int k = 0; k < 10; k++)
                 {
-                    float z = (params.box_size / 10.0f) * k;
+                    float z = (params.boxSize / 10.0f) * k;
                     glVertexAttrib4f(1, params.interact_x, params.interact_y, z, 1000.0f); // Pass vMag (1000.0f for bright color)
                     glDrawElements(GL_LINES, cylIndices.size(), GL_UNSIGNED_INT, 0);
                 }

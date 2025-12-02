@@ -1,4 +1,4 @@
-/* 
+/*
     Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
     Class: ECE6122
     Last Date Modified: 12/1/25
@@ -17,14 +17,14 @@ private:
     // Private member data
     SimWindow *window;
     SPHParams *params;
-    Camera    *cam;
+    Camera *cam;
 
 public:
     // Basic constructor
     SimGui(SimWindow *window, SPHParams *params, Camera *cam);
 
     // Getter for the simulator parameters struct
-    SPHParams* getParams();
+    SPHParams *getParams();
 
     // Initialize a new ImGui, OpenGL, and GLFW frame for the program
     void createFrame();
@@ -33,7 +33,7 @@ public:
     bool displayConfigGui();
 
     // Display the runtime config gui for the user
-    bool displayRunGui(int frame_count);
+    bool displayRunGui(int frameCount);
 
     // Render the gui
     void render();
