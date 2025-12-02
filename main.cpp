@@ -18,6 +18,7 @@
 #include "sph_interop.h"
 
 #include "SimWindow.h"
+#include "SimGui.h"
 
 // ---------------- Application State ----------------
 enum AppState
@@ -30,13 +31,10 @@ AppState currentState = STATE_CONFIG;
 // The Master Parameter Struct
 SPHParams params;
 
-// Camera Globals
-float cam_dist = 2.5f;
-float cam_yaw = -45.0f;
-float cam_pitch = 30.0f;
+Camera cam;
 float lastX = 400, lastY = 300;
 bool firstMouse = true;
-int currentColorMode = 0;  // 0 = Plasma, 1 = Blue
+
 
 // ---------------- Input Callbacks ----------------
 
@@ -64,19 +62,18 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
             float sensitivity = 0.5f;
-            cam_yaw += xoffset * sensitivity;
-            cam_pitch += yoffset * sensitivity;
+            cam.cam_yaw += xoffset * sensitivity;
+            cam.cam_pitch += yoffset * sensitivity;
 
-            if (cam_pitch > 89.0f)
-                cam_pitch = 89.0f;
-            if (cam_pitch < -89.0f)
-                cam_pitch = -89.0f;
+            if (cam.cam_pitch > 89.0f)
+                cam.cam_pitch = 89.0f;
+            if (cam.cam_pitch < -89.0f)
+                cam.cam_pitch = -89.0f;
         }
     }
 }
 
-void mouse_button_callback(GLFWwindow *window, int button, int action,
-                           int mods)
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
     ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 }
@@ -87,11 +84,11 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 
     if (!ImGui::GetIO().WantCaptureMouse && currentState == STATE_RUNNING)
     {
-        cam_dist -= (float)yoffset * 0.1f;
-        if (cam_dist < 0.1f)
-            cam_dist = 0.1f;
-        if (cam_dist > 5.0f)
-            cam_dist = 5.0f;
+        cam.cam_dist -= (float)yoffset * 0.1f;
+        if (cam.cam_dist < 0.1f)
+            cam.cam_dist = 0.1f;
+        if (cam.cam_dist > 5.0f)
+            cam.cam_dist = 5.0f;
     }
 }
 
@@ -131,7 +128,6 @@ void createSphere(std::vector<float> &vertices,
     }
 }
 
-// NEW: Wireframe Cylinder Generator
 void createWireCylinder(std::vector<float>& vertices,
                         std::vector<unsigned int>& indices) {
     const int SEGMENTS = 24;
@@ -180,6 +176,9 @@ int main()
     int window_height = 800;
     SimWindow simWindow(window_width, window_height);
     GLFWwindow *window = simWindow.getWindow();
+
+    // Init the gui backend
+    SimGui gui(&simWindow, &params);
    
     // Debug info on GL driver (helps diagnose CUDA interop availability)
     const GLubyte *vendor = glGetString(GL_VENDOR);
@@ -195,13 +194,6 @@ int main()
             std::cerr << "CUDA set device failed: " << cudaGetErrorString(cErr) << std::endl;
         }
     }
-
-    // --- ImGui Init ---
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(simWindow.glsl_version);
 
     // --- Callbacks ---
     glfwSetCursorPosCallback(window, mouse_callback);
@@ -279,87 +271,57 @@ int main()
         glClearColor(0.95f, 0.95f, 0.95f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        gui.createFrame();
 
-        if (currentState == STATE_CONFIG)
+        // ----------------------------------------------------
+        //  Configure Simulator Before Running
+        // ----------------------------------------------------
+        if (currentState == STATE_CONFIG && gui.displayConfigGui(&cam))
         {
-            ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize(ImVec2(400, 450), ImGuiCond_FirstUseEver);
-            ImGui::Begin("Detailed SPH Setup");
+            host_data.resize(params.particle_count * 4);
 
-            ImGui::TextColored(ImVec4(1, 1, 0, 1), "Core Settings");
-            ImGui::SliderInt("Particles", &params.particle_count, 100, 20000);
-            ImGui::SliderFloat("Time Step", &params.dt, 0.001f, 0.01f, "%.4f");
-            ImGui::SliderFloat("Visual Size", &params.visual_radius, 0.005f,
-                               0.05f);
+            glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
+            glBufferData(GL_ARRAY_BUFFER,
+                            params.particle_count * sizeof(float) * 4, NULL,
+                            GL_DYNAMIC_DRAW);
 
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0, 1, 1, 1), "Physics Parameters");
-            ImGui::SliderFloat("Smooth Rad (h)", &params.h, 0.02f, 0.2f);
-            ImGui::SliderFloat("Mass", &params.mass, 0.001f, 0.1f);
-            ImGui::SliderFloat("Rest Density", &params.rest_density, 0.1f,
-                               2000.0f);
-            ImGui::SliderFloat("Stiffness (k)", &params.stiffness, 1.0f, 50.0f);
-
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Environment");
-            ImGui::SliderFloat("Gravity", &params.gravity, -100.0f, 100.0f);
-            ImGui::SliderFloat("Wall Damp", &params.damping, -0.99f, -0.1f);
-            ImGui::SliderFloat("Box Size", &params.box_size, 0.5f, 5.0f);
-
-            ImGui::Dummy(ImVec2(0, 20));
-
-            if (ImGui::Button("INITIALIZE & RUN", ImVec2(-1, 50)))
+            // Register instance buffer with CUDA for direct writes
+            cudaError_t cErr = cudaGraphicsGLRegisterBuffer(&instanceVBORes, VBO_Inst, cudaGraphicsRegisterFlagsWriteDiscard);
+            if (cErr != cudaSuccess)
             {
-                host_data.resize(params.particle_count * 4);
-
-                glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
-                glBufferData(GL_ARRAY_BUFFER,
-                             params.particle_count * sizeof(float) * 4, NULL,
-                             GL_DYNAMIC_DRAW);
-
-                // Register instance buffer with CUDA for direct writes
-                cudaError_t cErr = cudaGraphicsGLRegisterBuffer(&instanceVBORes, VBO_Inst, cudaGraphicsRegisterFlagsWriteDiscard);
-                if (cErr != cudaSuccess)
-                {
-                    std::cerr << "cudaGraphicsGLRegisterBuffer failed: " << cudaGetErrorString(cErr) << std::endl;
-                    instanceVBORes = nullptr;
-                    useInterop = false;
-                }
-                else
-                {
-                    useInterop = true;
-                }
-
-                // Initialize CUDA simulation after interop resource is set up
-                initSimulation(&params);
-
-                // Reset Camera
-                cam_dist = 2.5f;
-                cam_yaw = -45.0f;
-                cam_pitch = 30.0f;
-
-                currentState = STATE_RUNNING;
+                std::cerr << "cudaGraphicsGLRegisterBuffer failed: " << cudaGetErrorString(cErr) << std::endl;
+                instanceVBORes = nullptr;
+                useInterop = false;
             }
-            ImGui::End();
+            else
+            {
+                useInterop = true;
+            }
+
+            // Initialize CUDA simulation after interop resource is set up
+            initSimulation(&params);
+
+            currentState = STATE_RUNNING;
         }
+
+        // ----------------------------------------------------
+        //  Run Simulation
+        // ----------------------------------------------------
         else if (currentState == STATE_RUNNING)
         {
             // ----------------------------------------------------
-            // 1. Calculate Camera Matrices EARLY (Needed for Raycast)
+            // 1. Calculate Camera Matrices
             // ----------------------------------------------------
             int width, height;
             glfwGetWindowSize(window, &width, &height);
 
             glm::vec3 target(params.box_size / 2.0f, params.box_size / 2.0f,
                              params.box_size / 2.0f);
-            float ry = glm::radians(cam_yaw);
-            float rp = glm::radians(cam_pitch);
-            glm::vec3 pos = target + glm::vec3(cam_dist * cos(rp) * cos(ry),
-                                               cam_dist * cos(rp) * sin(ry),
-                                               cam_dist * sin(rp));
+            float ry = glm::radians(cam.cam_yaw);
+            float rp = glm::radians(cam.cam_pitch);
+            glm::vec3 pos = target + glm::vec3(cam.cam_dist * cos(rp) * cos(ry),
+                                               cam.cam_dist * cos(rp) * sin(ry),
+                                               cam.cam_dist * sin(rp));
 
             glm::mat4 view = glm::lookAt(pos, target, glm::vec3(0, 0, 1));
             glm::mat4 proj = glm::perspective(
@@ -412,7 +374,9 @@ int main()
                 }
             }
 
+            // ----------------------------------------------------
             // 3. Physics Step
+            // ----------------------------------------------------
             float cmin = 0.0f, cmax = 1.0f;
             int count = 0;
             if (useInterop && instanceVBORes)
@@ -427,30 +391,18 @@ int main()
                 glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4, host_data.data());
             }
 
-            // // ----------------------------------------------------
-            // // 3. Physics Step
-            // // ----------------------------------------------------
-            // int count = stepSimulation(host_data.data(), &params);
-
-            // // ----------------------------------------------------
-            // // 4. Render Particles
-            // // ----------------------------------------------------
-            // glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
-            // glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4,
-            //                 host_data.data());
-
-            // 2. Upload Data (now written directly by CUDA into VBO)
-
+            // ----------------------------------------------------
+            // 4. Upload data
+            // ----------------------------------------------------
             glUseProgram(program);
 
             // Auto-Contrast from GPU-reduced values
-
             glUniform1f(glGetUniformLocation(program, "vmin"), cmin);
             glUniform1f(glGetUniformLocation(program, "vmax"), cmax);
             glUniform1f(glGetUniformLocation(program, "radius"),
                         params.visual_radius);
             glUniform1i(glGetUniformLocation(program, "colorMode"),
-                        currentColorMode);
+                        cam.currentColorMode);
 
             glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1,
                                GL_FALSE, glm::value_ptr(view));
@@ -501,13 +453,9 @@ int main()
             // ----------------------------------------------------
             // 6. Runtime UI
             // ----------------------------------------------------
-            ImGui::SetNextWindowPos(ImVec2(10, 10));
-            ImGui::Begin("Live Controls", NULL,
-                         ImGuiWindowFlags_AlwaysAutoResize);
-            ImGui::Text("FPS: %.1f | N: %d", ImGui::GetIO().Framerate, count);
-
-            if (ImGui::Button("STOP / CONFIG"))
+            if (gui.displayRunGui(&cam, count))
             {
+                // Stop button pressed, go back to config screen
                 freeSimulation();
                 if (instanceVBORes)
                 {
@@ -516,36 +464,9 @@ int main()
                 }
                 currentState = STATE_CONFIG;
             }
-
-            if (ImGui::Button("Reset Camera View")) {
-                cam_dist = 2.5f;
-                cam_yaw = -45.0f;
-                cam_pitch = 30.0f;
-            }
-
-            ImGui::Separator();
-
-            const char* btnLabel =
-                (currentColorMode == 0) ? "Color: PLASMA" : "Color: OCEAN BLUE";
-            if (ImGui::Button(btnLabel)) {
-                currentColorMode =
-                    !currentColorMode;  // Toggles between 0 and 1
-            }
-
-            ImGui::Text("Live Tuning (Tweak safely!)");
-            ImGui::SliderFloat("Gravity", &params.gravity, -50.0f, 50.0f);
-            ImGui::SliderFloat("Stiffness", &params.stiffness, 1.0f, 50.0f);
-            ImGui::SliderFloat("Damping", &params.damping, -1.0f, -0.1f);
-
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(1, 0, 1, 1), "Interaction (Right Click)");
-            ImGui::SliderFloat("Radius", &params.interact_radius, 0.05f, 0.5f);
-
-            ImGui::End();
         }
 
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        gui.render();
         glfwSwapBuffers(window);
     }
 
