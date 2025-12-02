@@ -64,7 +64,7 @@ bool SimGui::displayConfigGui()
     ImGui::Begin("Detailed SPH Setup");
 
     ImGui::TextColored(ImVec4(1, 1, 0, 1), "Core Settings");
-    ImGui::SliderInt("Particles", &(params->particleCount), 100, 20000);
+    ImGui::SliderInt("Particles", &(params->particleCount), 100, 100000);
     ImGui::SliderFloat("Time Step", &(params->dt), 0.0001f, 0.01f, "%.4f");
     ImGui::SliderFloat("Visual Size", &(params->visualRadius), 0.005f, 0.05f);
 

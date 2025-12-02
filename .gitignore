@@ -1,9 +1,25 @@
-# Build outputs
+# --- Build Outputs (Linux) ---
 *.o
 simple_sph
-build/
 
-# CUDA build artifacts
+# --- Build Outputs (Windows) ---
+*.obj
+*.exe
+*.exp
+*.lib
+*.pdb
+*.ilk
+
+# --- Build Directories ---
+build/
+# GLFW (Linux & Windows builds)
+external/glfw-3.1.2/build/
+external/glfw-3.1.2/build_msvc/
+# GLEW & GLM builds
+external/glew-2.1.0/build/
+external/glm-0.9.7.1/build/
+
+# --- CUDA build artifacts ---
 *.i
 *.ii
 *.gpu
@@ -11,21 +27,17 @@ build/
 *.cubin
 *.fatbin
 
-# Output data files
+# --- Output data files ---
 positions.csv
 *.csv
 
-# ImGui user settings (DO NOT COMMIT)
+# --- ImGui ---
+# User settings
 imgui.ini
-
-# ImGui library (downloaded via wget)
+# Library source (downloaded via make setup)
 imgui/
 
-# GLFW Library
-external/glfw-3.1.2/build
-external/glm-0.9.7.1/build
-
-# IDE/Editor files
+# --- IDE/Editor files ---
 .vscode/
 .idea/
 *.swp
@@ -33,5 +45,5 @@ external/glm-0.9.7.1/build
 *~
 .DS_Store
 
-# OS files
+# --- OS files ---
 Thumbs.db

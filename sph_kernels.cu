@@ -1,12 +1,17 @@
 /*
+/*
     Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
     Class: ECE6122
     Last Date Modified: 12/2/25
     Description: CUDA Kernels for the fluid simulation using SPH
 */
 
-#include <cuda_runtime.h>
+#ifdef _WIN32
+#include <windows.h>  // Crucial: Must be included before gl.h on Windows
+#endif
+#include <GL/gl.h>  // Provides GLuint/GLenum without the overhead of GLEW
 #include <cuda_gl_interop.h>
+#include <cuda_runtime.h>
 
 #include <cmath>
 #include <cstdio>
@@ -17,19 +22,17 @@
 #define CHECK_CUDA(call)                                                       \
     {                                                                          \
         const cudaError_t error = call;                                        \
-        if (error != cudaSuccess)                                              \
-        {                                                                      \
+        if (error != cudaSuccess) {                                            \
             printf("Error: %s:%d, ", __FILE__, __LINE__);                      \
             printf("code:%d, reason: %s\n", error, cudaGetErrorString(error)); \
         }                                                                      \
     }
 
-const float PI = 3.14159265359f;
+#define PI 3.14159265359
 const int TYPE_FLUID = 0;
 const int TYPE_BOUNDARY = 1;
 
-struct Particle
-{
+struct Particle {
     float3 pos;
     float3 vel;
     float density;
@@ -114,8 +117,7 @@ __global__ void compute_density_pressure(Particle *particles, int numParticles,
 
         // Calculate the squared distance
         float r2 = rij.x * rij.x + rij.y * rij.y + rij.z * rij.z;
-        if (r2 < h * h)
-        {
+        if (r2 < h * h) {
             float contribution = mass * poly6(r2, h);
             if (particles[j].type == TYPE_BOUNDARY)
                 contribution *= 2.0f;
@@ -187,9 +189,7 @@ __global__ void compute_forces_and_integrate(
                 rho_j =
                     particles[i].density < 1.0f ? 1.0f : particles[i].density;
                 p_j = p_i;
-            }
-            else
-            {
+            } else {
                 p_j = particles[j].pressure;
                 rho_j = particles[j].density;
             }
@@ -264,12 +264,12 @@ __global__ void compute_forces_and_integrate(
     // Boundary Box
     // ------------------------------------------------------------------
 
+
     // X-Axis
     if (particles[i].pos.x < radius)
     {
         particles[i].pos.x = radius;
-        if (particles[i].vel.x < 0)
-            particles[i].vel.x *= damping;
+        if (particles[i].vel.x < 0) particles[i].vel.x *= damping;
     }
     if (particles[i].pos.x > boxSize - radius)
     {
@@ -279,11 +279,9 @@ __global__ void compute_forces_and_integrate(
     }
 
     // Y-Axis
-    if (particles[i].pos.y < radius)
-    {
+    if (particles[i].pos.y < radius) {
         particles[i].pos.y = radius;
-        if (particles[i].vel.y < 0)
-            particles[i].vel.y *= damping;
+        if (particles[i].vel.y < 0) particles[i].vel.y *= damping;
     }
     if (particles[i].pos.y > boxSize - radius)
     {
@@ -293,11 +291,9 @@ __global__ void compute_forces_and_integrate(
     }
 
     // Z-Axis
-    if (particles[i].pos.z < radius)
-    {
+    if (particles[i].pos.z < radius) {
         particles[i].pos.z = radius;
-        if (particles[i].vel.z < 0)
-            particles[i].vel.z *= damping;
+        if (particles[i].vel.z < 0) particles[i].vel.z *= damping;
     }
     if (particles[i].pos.z > boxSize - radius)
     {
@@ -318,10 +314,8 @@ __global__ void compute_forces_and_integrate(
 __global__ void update_render_buffer_compact(Particle *particles, float4 *vboPos, int n, int *counter)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n)
-        return;
-    if (particles[i].type == TYPE_FLUID)
-    {
+    if (i >= n) return;
+    if (particles[i].type == TYPE_FLUID) {
         int idx = atomicAdd(counter, 1);
         float vmag = sqrtf(particles[i].vel.x * particles[i].vel.x +
                            particles[i].vel.y * particles[i].vel.y +
@@ -338,44 +332,40 @@ __global__ void update_render_buffer_compact(Particle *particles, float4 *vboPos
 /**
  * @brief CUDA Kernel to calculate the min velocity of a list of points
  *
+ *
  * @param  addr  current address of point in list
  * @param  val  current val in list
  */
-__device__ inline void atomicFloatMin(float *addr, float val)
-{
-    int *addr_i = reinterpret_cast<int *>(addr);
+__device__ inline void atomicFloatMin(float* addr, float val) {
+    int* addr_i = reinterpret_cast<int*>(addr);
     int old = *addr_i, assumed;
-    while (true)
-    {
+    while (true) {
         assumed = old;
         float old_f = __int_as_float(assumed);
         float new_f = fminf(old_f, val);
         int new_i = __float_as_int(new_f);
         old = atomicCAS(addr_i, assumed, new_i);
-        if (old == assumed)
-            break;
+        if (old == assumed) break;
     }
 }
 
 /**
  * @brief CUDA Kernel to calculate the max velocity of a list of points
  *
+ *
  * @param  addr  current address of point in list
  * @param  val  current val in list
  */
-__device__ inline void atomicFloatMax(float *addr, float val)
-{
-    int *addr_i = reinterpret_cast<int *>(addr);
+__device__ inline void atomicFloatMax(float* addr, float val) {
+    int* addr_i = reinterpret_cast<int*>(addr);
     int old = *addr_i, assumed;
-    while (true)
-    {
+    while (true) {
         assumed = old;
         float old_f = __int_as_float(assumed);
         float new_f = fmaxf(old_f, val);
         int new_i = __float_as_int(new_f);
         old = atomicCAS(addr_i, assumed, new_i);
-        if (old == assumed)
-            break;
+        if (old == assumed) break;
     }
 }
 
@@ -401,6 +391,7 @@ __global__ void reduce_vmin_vmax(const float4 *vboPos, int n, float *vmin, float
 
 /**
  * @brief  Create a face of the boundary box (just a wall of fluid points)
+ *
  *
  * @param  list list of particles to add the face particles to
  * @param  start
@@ -435,8 +426,7 @@ void add_boundary_face(std::vector<Particle> &list, float3 start, float3 uDir,
  *
  * @param  params  simulation physics paramaters
  */
-void initSimulation(SPHParams *params)
-{
+void initSimulation(SPHParams* params) {
     // Free any CUDA memory if not already done so
     if (dParticles)
     {
@@ -515,6 +505,8 @@ void initSimulation(SPHParams *params)
  * @brief Perform one simulation step using CUDA-OpenGL interop
  *
  * @param  instanceVBORes
+ *
+ * @param  instanceVBORes
  * @param  params  simulation physics paramaters
  * @param  outVmin  min velocity of all points in the buffer
  * @param  outVmax  max velocity of all points in the buffer
@@ -541,8 +533,7 @@ int stepSimulation(cudaGraphicsResource *instanceVBORes, SPHParams *params, floa
     cudaDeviceSynchronize();
 
     // Map OpenGL VBO and fill it directly
-    if (instanceVBORes == nullptr)
-    {
+    if (instanceVBORes == nullptr) {
         // Interop not available; skip rendering
         *outVmin = 0.0f;
         *outVmax = 1.0f;
@@ -557,11 +548,12 @@ int stepSimulation(cudaGraphicsResource *instanceVBORes, SPHParams *params, floa
         return 0;
     }
     size_t mapped_size = 0;
-    float4 *d_vbo_ptr = nullptr;
-    cudaError_t pErr = cudaGraphicsResourceGetMappedPointer((void **)&d_vbo_ptr, &mapped_size, instanceVBORes);
-    if (pErr != cudaSuccess || d_vbo_ptr == nullptr)
-    {
-        printf("Error: %s:%d, code:%d, reason: %s\n", __FILE__, __LINE__, pErr, cudaGetErrorString(pErr));
+    float4* d_vbo_ptr = nullptr;
+    cudaError_t pErr = cudaGraphicsResourceGetMappedPointer(
+        (void**)&d_vbo_ptr, &mapped_size, instanceVBORes);
+    if (pErr != cudaSuccess || d_vbo_ptr == nullptr) {
+        printf("Error: %s:%d, code:%d, reason: %s\n", __FILE__, __LINE__, pErr,
+               cudaGetErrorString(pErr));
         // Attempt to unmap if mapping succeeded
         cudaGraphicsUnmapResources(1, &instanceVBORes);
         *outVmin = 0.0f;
@@ -610,9 +602,9 @@ int stepSimulation(cudaGraphicsResource *instanceVBORes, SPHParams *params, floa
     }
 
     cudaError_t uErr = cudaGraphicsUnmapResources(1, &instanceVBORes);
-    if (uErr != cudaSuccess)
-    {
-        printf("Error: %s:%d, code:%d, reason: %s\n", __FILE__, __LINE__, uErr, cudaGetErrorString(uErr));
+    if (uErr != cudaSuccess) {
+        printf("Error: %s:%d, code:%d, reason: %s\n", __FILE__, __LINE__, uErr,
+               cudaGetErrorString(uErr));
     }
     return fluidCount;
 }

@@ -7,32 +7,28 @@
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <cuda_gl_interop.h>
+#include <cuda_runtime.h>
 
 #include <cmath>
+#include <fstream>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
+#include <string>
 #include <vector>
 
-#include <cuda_runtime.h>
-#include <cuda_gl_interop.h>
-
+#include "SimGui.h"
+#include "SimWindow.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "shaders.h"
 #include "sph_interop.h"
 
-#include "SimWindow.h"
-#include "SimGui.h"
-
-// ---------------- Application State ----------------
-enum AppState
-{
-    STATE_CONFIG,
-    STATE_RUNNING
-};
+// Application State
+enum AppState { STATE_CONFIG, STATE_RUNNING };
 AppState currentState = STATE_CONFIG;
 
 // The Master Parameter Struct
@@ -44,25 +40,27 @@ float lastX = 400, lastY = 300;
 bool firstMouse = true;
 
 // ---------------- Input Callbacks ----------------
-extern void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow *window, double x, double y);
-extern void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow *window, int button, int action, int mods);
-extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow *window, double xoffset, double yoffset);
+extern void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow* window, double x,
+                                             double y);
+extern void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow* window, int button,
+                                               int action, int mods);
+extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow* window, double xoffset,
+                                          double yoffset);
 
 /**
- * @brief Callback function to get the position of the mouse and rotate the camera accordingly
+ * @brief Callback function to get the position of the mouse and rotate the
+ * camera accordingly
  *
  * @param  window  program window
  * @param  xpos  x coordinate of the mouse
  * @param  ypos  y coordinate of the mouse
  */
-void mouseCallback(GLFWwindow *window, double xpos, double ypos)
-{
+void mouseCallback(GLFWwindow* window, double xpos, double ypos) {
     // Callback object
     ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
 
     // As long as the mouse exists, we can get the position
-    if (firstMouse)
-    {
+    if (firstMouse) {
         lastX = xpos;
         lastY = ypos;
         firstMouse = false;
@@ -74,19 +72,15 @@ void mouseCallback(GLFWwindow *window, double xpos, double ypos)
     lastY = ypos;
 
     // When pressing mouse1, rotate the camera
-    if (currentState == STATE_RUNNING && !ImGui::GetIO().WantCaptureMouse)
-    {
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-        {
+    if (currentState == STATE_RUNNING && !ImGui::GetIO().WantCaptureMouse) {
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             // Rotation calculations
             float sensitivity = 0.5f;
             cam.camYaw += xoffset * sensitivity;
             cam.camPitch += yoffset * sensitivity;
 
-            if (cam.camPitch > 89.0f)
-                cam.camPitch = 89.0f;
-            if (cam.camPitch < -89.0f)
-                cam.camPitch = -89.0f;
+            if (cam.camPitch > 89.0f) cam.camPitch = 89.0f;
+            if (cam.camPitch < -89.0f) cam.camPitch = -89.0f;
         }
     }
 }
@@ -94,27 +88,22 @@ void mouseCallback(GLFWwindow *window, double xpos, double ypos)
 /**
  * @brief  Callback function for the mouse button
  */
-void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
-{
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 }
 
 /**
  * @brief  Callback function to zoom the camera in/out on mouse scroll
  */
-void scrollCallback(GLFWwindow *window, double xoffset, double yoffset)
-{
+void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
     // Callback object
     ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
 
     // Handles the calculations for zooming
-    if (!ImGui::GetIO().WantCaptureMouse && currentState == STATE_RUNNING)
-    {
+    if (!ImGui::GetIO().WantCaptureMouse && currentState == STATE_RUNNING) {
         cam.camDist -= (float)yoffset * 0.1f;
-        if (cam.camDist < 0.1f)
-            cam.camDist = 0.1f;
-        if (cam.camDist > 5.0f)
-            cam.camDist = 5.0f;
+        if (cam.camDist < 0.1f) cam.camDist = 0.1f;
+        if (cam.camDist > 5.0f) cam.camDist = 5.0f;
     }
 }
 
@@ -126,18 +115,16 @@ void scrollCallback(GLFWwindow *window, double xoffset, double yoffset)
  * @param  verticies  global vector of all verticies to be drawn
  * @param  indicies  global vector of all indicides to be drawn
  */
-void createSphere(std::vector<float> &vertices, std::vector<unsigned int> &indices)
-{
+void createSphere(std::vector<float>& vertices,
+                  std::vector<unsigned int>& indices) {
     // Necessary Constants
     const int X_SEGMENTS = 12;
     const int Y_SEGMENTS = 12;
     const float PI = 3.14159265359f;
 
     // Create the verticies of the sphere
-    for (int y = 0; y <= Y_SEGMENTS; ++y)
-    {
-        for (int x = 0; x <= X_SEGMENTS; ++x)
-        {
+    for (int y = 0; y <= Y_SEGMENTS; ++y) {
+        for (int x = 0; x <= X_SEGMENTS; ++x) {
             float xSeg = (float)x / X_SEGMENTS;
             float ySeg = (float)y / Y_SEGMENTS;
             float xPos = std::cos(xSeg * 2.0f * PI) * std::sin(ySeg * PI);
@@ -150,10 +137,8 @@ void createSphere(std::vector<float> &vertices, std::vector<unsigned int> &indic
     }
 
     // Create the indicies of the sphere
-    for (int y = 0; y < Y_SEGMENTS; ++y)
-    {
-        for (int x = 0; x < X_SEGMENTS; ++x)
-        {
+    for (int y = 0; y < Y_SEGMENTS; ++y) {
+        for (int x = 0; x < X_SEGMENTS; ++x) {
             indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
             indices.push_back(y * (X_SEGMENTS + 1) + x);
             indices.push_back(y * (X_SEGMENTS + 1) + (x + 1));
@@ -170,15 +155,14 @@ void createSphere(std::vector<float> &vertices, std::vector<unsigned int> &indic
  * @param  verticies  global vector of all verticies to be drawn
  * @param  indicies  global vector of all indicides to be drawn
  */
-void createWireCylinder(std::vector<float> &vertices, std::vector<unsigned int> &indices)
-{
+void createWireCylinder(std::vector<float>& vertices,
+                        std::vector<unsigned int>& indices) {
     // Necessary constants
     const int SEGMENTS = 24;
     const float PI = 3.14159265359f;
 
     // Create vertices for top and bottom rings
-    for (int i = 0; i < SEGMENTS; i++)
-    {
+    for (int i = 0; i < SEGMENTS; i++) {
         // Calculate the angle and x/y positions
         float angle = (float)i / SEGMENTS * 2.0f * PI;
         float x = cos(angle);
@@ -196,8 +180,7 @@ void createWireCylinder(std::vector<float> &vertices, std::vector<unsigned int> 
     }
 
     // Create side wall line indices
-    for (int i = 0; i < SEGMENTS; i++)
-    {
+    for (int i = 0; i < SEGMENTS; i++) {
         // Calculate base of cylinder
         int base = i * 2;
         int next = ((i + 1) % SEGMENTS) * 2;
@@ -211,40 +194,88 @@ void createWireCylinder(std::vector<float> &vertices, std::vector<unsigned int> 
         indices.push_back(next + 1);
 
         // Vertical Connector (every 4th segment to keep it clean)
-        if (i % 4 == 0)
-        {
+        if (i % 4 == 0) {
             indices.push_back(base);
             indices.push_back(base + 1);
         }
     }
 }
 
+// Benchmarking Helper
+void printSystemSpecs() {
+    std::cout
+        << "\n================ HARDWARE BENCHMARK INFO ================\n";
+
+    // 1. CPU Info (Linux/WSL Approach)
+    std::string cpuName = "Unknown CPU";
+    std::ifstream cpuFile("/proc/cpuinfo");
+    if (cpuFile.is_open()) {
+        std::string line;
+        while (std::getline(cpuFile, line)) {
+            if (line.substr(0, 10) == "model name") {
+                size_t pos = line.find(":");
+                if (pos != std::string::npos) {
+                    cpuName = line.substr(pos + 2);
+                    break;
+                }
+            }
+        }
+        cpuFile.close();
+    }
+    std::cout << "CPU Model:  " << cpuName << "\n";
+
+    // 2. GPU Info (CUDA)
+    int deviceCount;
+    cudaGetDeviceCount(&deviceCount);
+    if (deviceCount > 0) {
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, 0);
+        std::cout << "GPU Model:  " << prop.name << "\n";
+        std::cout << "GPU VRAM:   "
+                  << (double)prop.totalGlobalMem / (1024.0 * 1024.0) << " MB\n";
+        std::cout << "CUDA Cores: " << prop.multiProcessorCount << " MPs\n";
+    } else {
+        std::cout << "GPU: No CUDA Device Found\n";
+    }
+
+    // 3. OpenGL Info
+    const GLubyte* vendor = glGetString(GL_VENDOR);
+    const GLubyte* renderer = glGetString(GL_RENDERER);
+    std::cout << "GL Vendor:  " << (vendor ? (const char*)vendor : "?") << "\n";
+    std::cout << "GL Renderer: " << (renderer ? (const char*)renderer : "?")
+              << "\n";
+    std::cout
+        << "=========================================================\n\n";
+}
+
 // ---------------- Main ----------------
-int main()
-{
+int main() {
     // Create a window for the program
     int windowWidth = 1280;
     int windowHeight = 800;
     SimWindow simWindow(windowWidth, windowHeight);
-    GLFWwindow *window = simWindow.getWindow();
+    GLFWwindow* window = simWindow.getWindow();
 
     // Init the gui backend
     SimGui gui(&simWindow, &params, &cam);
 
     // Debug info on GL driver (helps diagnose CUDA interop availability)
-    const GLubyte *vendor = glGetString(GL_VENDOR);
-    const GLubyte *renderer = glGetString(GL_RENDERER);
-    std::cout << "GL Vendor: " << (vendor ? (const char *)vendor : "?") << "\n";
-    std::cout << "GL Renderer: " << (renderer ? (const char *)renderer : "?") << "\n";
+    const GLubyte* vendor = glGetString(GL_VENDOR);
+    const GLubyte* renderer = glGetString(GL_RENDERER);
+    std::cout << "GL Vendor: " << (vendor ? (const char*)vendor : "?") << "\n";
+    std::cout << "GL Renderer: " << (renderer ? (const char*)renderer : "?")
+              << "\n";
 
     // Bind CUDA device before any CUDA runtime calls (interop stability)
     {
         cudaError_t cErr = cudaSetDevice(0);
-        if (cErr != cudaSuccess)
-        {
-            std::cerr << "CUDA set device failed: " << cudaGetErrorString(cErr) << std::endl;
+        if (cErr != cudaSuccess) {
+            std::cerr << "CUDA set device failed: " << cudaGetErrorString(cErr)
+                      << std::endl;
         }
     }
+
+    printSystemSpecs();
 
     // --- Callbacks ---
     glfwSetCursorPosCallback(window, mouseCallback);
@@ -268,7 +299,7 @@ int main()
     // Set up CUDA graphics
     unsigned int VAO, VBO, EBO, VBOInst;
     unsigned int cylVAO, cylVBO, cylEBO;
-    cudaGraphicsResource *instanceVBORes = nullptr;
+    cudaGraphicsResource* instanceVBORes = nullptr;
     bool useInterop = true;
 
     // Create GPU Objects and Buffers
@@ -280,15 +311,19 @@ int main()
     // Sphere Buffers
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sphereVerts.size() * sizeof(float), sphereVerts.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sphereVerts.size() * sizeof(float),
+                 sphereVerts.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(int), sphereIndices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(int),
+                 sphereIndices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float),
+                          (void*)0);
     glEnableVertexAttribArray(0);
 
     // Instance Buffer
     glBindBuffer(GL_ARRAY_BUFFER, VBOInst);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                          (void*)0);
     glEnableVertexAttribArray(1);
     glVertexAttribDivisor(1, 1);
 
@@ -298,22 +333,29 @@ int main()
     glGenBuffers(1, &cylEBO);
     glBindVertexArray(cylVAO);
     glBindBuffer(GL_ARRAY_BUFFER, cylVBO);
-    glBufferData(GL_ARRAY_BUFFER, cylVerts.size() * sizeof(float), cylVerts.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, cylVerts.size() * sizeof(float),
+                 cylVerts.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cylEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, cylIndices.size() * sizeof(int), cylIndices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, cylIndices.size() * sizeof(int),
+                 cylIndices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float),
+                          (void*)0);
     glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1); // Enable Attr 1 for shader compatibility
+    glEnableVertexAttribArray(1);  // Enable Attr 1 for shader compatibility
 
     glEnable(GL_DEPTH_TEST);
 
-    std::vector<float> hostData; // no longer used for uploads; kept for sizing state
+    std::vector<float>
+        hostData;  // no longer used for uploads; kept for sizing state
+
+    double lastTime = glfwGetTime();
+    int nbFrames = 0;
+    bool timerReset = true;
 
     // ----------------------------------------------------
     //  Main Loop
     // ----------------------------------------------------
-    while (!glfwWindowShouldClose(window))
-    {
+    while (!glfwWindowShouldClose(window)) {
         // Set the background and UI
         glfwPollEvents();
         glClearColor(0.95f, 0.95f, 0.95f, 1.0f);
@@ -323,8 +365,7 @@ int main()
         // ----------------------------------------------------
         //  Configure Simulator Before Running
         // ----------------------------------------------------
-        if (currentState == STATE_CONFIG && gui.displayConfigGui())
-        {
+        if (currentState == STATE_CONFIG && gui.displayConfigGui()) {
             hostData.resize(params.particleCount * 4);
 
             // Create buffers
@@ -334,15 +375,15 @@ int main()
                          GL_DYNAMIC_DRAW);
 
             // Register instance buffer with CUDA for direct writes
-            cudaError_t cErr = cudaGraphicsGLRegisterBuffer(&instanceVBORes, VBOInst, cudaGraphicsRegisterFlagsWriteDiscard);
-            if (cErr != cudaSuccess)
-            {
-                std::cerr << "cudaGraphicsGLRegisterBuffer failed: " << cudaGetErrorString(cErr) << std::endl;
+            cudaError_t cErr = cudaGraphicsGLRegisterBuffer(
+                &instanceVBORes, VBOInst,
+                cudaGraphicsRegisterFlagsWriteDiscard);
+            if (cErr != cudaSuccess) {
+                std::cerr << "cudaGraphicsGLRegisterBuffer failed: "
+                          << cudaGetErrorString(cErr) << std::endl;
                 instanceVBORes = nullptr;
                 useInterop = false;
-            }
-            else
-            {
+            } else {
                 useInterop = true;
             }
 
@@ -355,71 +396,93 @@ int main()
         // ----------------------------------------------------
         //  Run Simulation
         // ----------------------------------------------------
-        else if (currentState == STATE_RUNNING)
-        {
+        else if (currentState == STATE_RUNNING) {
+            // --- FPS Benchmarking Logic ---
+            double currentTime = glfwGetTime();
+
+            // If we just started running, reset the timer anchor
+            if (timerReset) {
+                lastTime = currentTime;
+                nbFrames = 0;
+                timerReset = false;
+            }
+
+            nbFrames++;
+            // Print average FPS every 1.0 seconds
+            if (currentTime - lastTime >= 1.0) {
+                std::cout << "Benchmark: "
+                          << double(nbFrames) / (currentTime - lastTime)
+                          << " FPS | Particles: " << params.particleCount
+                          << std::endl;
+                nbFrames = 0;
+                lastTime = currentTime;
+            }
+            // ------------------------------
+
             // ----------------------------------------------------
             // 1. Calculate Camera Matrices from User Controls
             // ----------------------------------------------------
             int width, height;
             glfwGetWindowSize(window, &width, &height);
 
-            glm::vec3 target(params.boxSize / 2.0f, params.boxSize / 2.0f, params.boxSize / 2.0f);
+            glm::vec3 target(params.boxSize / 2.0f, params.boxSize / 2.0f,
+                             params.boxSize / 2.0f);
             float ry = glm::radians(cam.camYaw);
             float rp = glm::radians(cam.camPitch);
-            glm::vec3 pos = target + glm::vec3(
-                                         cam.camDist * cos(rp) * cos(ry),
-                                         cam.camDist * cos(rp) * sin(ry),
-                                         cam.camDist * sin(rp));
+            glm::vec3 pos = target + glm::vec3(cam.camDist * cos(rp) * cos(ry),
+                                               cam.camDist * cos(rp) * sin(ry),
+                                               cam.camDist * sin(rp));
 
             glm::mat4 view = glm::lookAt(pos, target, glm::vec3(0, 0, 1));
 
-            glm::mat4 proj = glm::perspective(
-                glm::radians(45.0f),   // 45 degree FOV
-                (float)width / height, // aspect ratio
-                0.1f,                  // near clipPIng plane
-                100.0f                 // far clipPIng plane
-            );
+            glm::mat4 proj =
+                glm::perspective(glm::radians(45.0f),    // 45 degree FOV
+                                 (float)width / height,  // aspect ratio
+                                 0.1f,                   // near clipPIng plane
+                                 100.0f                  // far clipPIng plane
+                );
 
             // ----------------------------------------------------
             // 2. Interaction Logic: Ray-Plane Intersection
             // ----------------------------------------------------
             params.isInteracting = 0;
-            if ((glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) && !ImGui::GetIO().WantCaptureMouse)
-            {
+            if ((glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) ==
+                 GLFW_PRESS) &&
+                !ImGui::GetIO().WantCaptureMouse) {
                 double mx, my;
                 glfwGetCursorPos(window, &mx, &my);
 
                 // Unproject mouse at near (z=0) and far (z=1)
-                glm::vec3 start = glm::unProject(
-                    glm::vec3(mx, height - my, 0.0f),
-                    view,
-                    proj,
-                    glm::vec4(0, 0, width, height));
-                glm::vec3 end = glm::unProject(
-                    glm::vec3(mx, height - my, 1.0f),
-                    view,
-                    proj,
-                    glm::vec4(0, 0, width, height));
+                glm::vec3 start =
+                    glm::unProject(glm::vec3(mx, height - my, 0.0f), view, proj,
+                                   glm::vec4(0, 0, width, height));
+                glm::vec3 end =
+                    glm::unProject(glm::vec3(mx, height - my, 1.0f), view, proj,
+                                   glm::vec4(0, 0, width, height));
                 glm::vec3 dir = glm::normalize(end - start);
 
                 // Plane Equation: Z = BoxSize / 2
-                // We intersect the ray with the horizontal plane in the middle of the fluid
+                // We intersect the ray with the horizontal plane in the middle
+                // of the fluid
                 float planeZ = params.boxSize * 0.5f;
                 glm::vec3 normal(0, 0, 1);
                 float denom = glm::dot(dir, normal);
 
-                if (std::abs(denom) > 0.0001f)
-                {
-                    float t = glm::dot(glm::vec3(0, 0, planeZ) - start, normal) / denom;
+                if (std::abs(denom) > 0.0001f) {
+                    float t =
+                        glm::dot(glm::vec3(0, 0, planeZ) - start, normal) /
+                        denom;
 
-                    if (t >= 0)
-                    {
+                    if (t >= 0) {
                         glm::vec3 worldPos = start + dir * t;
 
                         // Clamp to box bounds
-                        params.interactX = glm::clamp(worldPos.x, 0.0f, params.boxSize);
-                        params.interactY = glm::clamp(worldPos.y, 0.0f, params.boxSize);
-                        params.interactZ = glm::clamp(worldPos.z, 0.0f, params.boxSize);
+                        params.interactX =
+                            glm::clamp(worldPos.x, 0.0f, params.boxSize);
+                        params.interactY =
+                            glm::clamp(worldPos.y, 0.0f, params.boxSize);
+                        params.interactZ =
+                            glm::clamp(worldPos.z, 0.0f, params.boxSize);
 
                         params.isInteracting = 1;
                     }
@@ -432,19 +495,21 @@ int main()
             float cmin = 0.0f, cmax = 1.0f;
             int count = 0;
 
-            // Use interop to send simulation data directly between CUDA and OpenGL, without an extra CPU step
-            if (useInterop && instanceVBORes)
-            {
+            // Use interop to send simulation data directly between CUDA and
+            // OpenGL, without an extra CPU step
+            if (useInterop && instanceVBORes) {
                 count = stepSimulation(instanceVBORes, &params, &cmin, &cmax);
             }
 
-            // If interop is not available, do extra data transfers between CPU and GPU
-            else
-            {
+            // If interop is not available, do extra data transfers between CPU
+            // and GPU
+            else {
                 // Fallback path: compute and upload via CPU
-                count = stepSimulationFallback(hostData.data(), &params, &cmin, &cmax);
+                count = stepSimulationFallback(hostData.data(), &params, &cmin,
+                                               &cmax);
                 glBindBuffer(GL_ARRAY_BUFFER, VBOInst);
-                glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4, hostData.data());
+                glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4,
+                                hostData.data());
             }
 
             // ----------------------------------------------------
@@ -453,24 +518,29 @@ int main()
             glUseProgram(program);
 
             // Auto-Contrast from GPU-reduced values
-            glUniform1f(glGetUniformLocation(program, "vmin"), cmin);
-            glUniform1f(glGetUniformLocation(program, "vmax"), cmax);
-            glUniform1f(glGetUniformLocation(program, "radius"), params.visualRadius);
-            glUniform1i(glGetUniformLocation(program, "colorMode"), cam.currentColorMode);
+            glUniform1f(glGetUniformLocation(program, "vMin"), cmin);
+            glUniform1f(glGetUniformLocation(program, "vMax"), cmax);
+            glUniform1f(glGetUniformLocation(program, "radius"),
+                        params.visualRadius);
+            glUniform1i(glGetUniformLocation(program, "colorMode"),
+                        cam.currentColorMode);
 
-            glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, glm::value_ptr(view));
-            glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE, glm::value_ptr(proj));
+            glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1,
+                               GL_FALSE, glm::value_ptr(view));
+            glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1,
+                               GL_FALSE, glm::value_ptr(proj));
 
             glBindVertexArray(VAO);
-            glDrawElementsInstanced(GL_TRIANGLES, sphereIndices.size(), GL_UNSIGNED_INT, 0, count);
+            glDrawElementsInstanced(GL_TRIANGLES, sphereIndices.size(),
+                                    GL_UNSIGNED_INT, 0, count);
 
             // ----------------------------------------------------
             // 5. Render Interaction Cylinder (Wireframe)
             // ----------------------------------------------------
-            if (params.isInteracting)
-            {
+            if (params.isInteracting) {
                 // Set radius uniform to the interaction radius
-                glUniform1f(glGetUniformLocation(program, "radius"), params.interactRadius);
+                glUniform1f(glGetUniformLocation(program, "radius"),
+                            params.interactRadius);
 
                 // Hack: Set vmin/vmax to 0/1, and pass a huge vMag (1000) in
                 // the attribute to force the color to the max value
@@ -479,16 +549,20 @@ int main()
 
                 glBindVertexArray(cylVAO);
 
-                // Disable the instanced attribute array (Loc 1) so we can pass manual data via glVertexAttrib4f
+                // Disable the instanced attribute array (Loc 1) so we can pass
+                // manual data via glVertexAttrib4f
                 glDisableVertexAttribArray(1);
-                glDisable(GL_DEPTH_TEST); // Draw on top of fluid
+                glDisable(GL_DEPTH_TEST);  // Draw on top of fluid
 
-                // Draw a stack of wire cylinders to visualize the stirring column
-                for (int k = 0; k < 10; k++)
-                {
+                // Draw a stack of wire cylinders to visualize the stirring
+                // column
+                for (int k = 0; k < 10; k++) {
                     float z = (params.boxSize / 10.0f) * k;
-                    glVertexAttrib4f(1, params.interactX, params.interactY, z, 1000.0f); // Pass vMag (1000.0f for bright color)
-                    glDrawElements(GL_LINES, cylIndices.size(), GL_UNSIGNED_INT, 0);
+                    glVertexAttrib4f(
+                        1, params.interactX, params.interactY, z,
+                        1000.0f);  // Pass vMag (1000.0f for bright color)
+                    glDrawElements(GL_LINES, cylIndices.size(), GL_UNSIGNED_INT,
+                                   0);
                 }
 
                 // Restore state
@@ -499,12 +573,10 @@ int main()
             // ----------------------------------------------------
             // 6. Runtime UI
             // ----------------------------------------------------
-            if (gui.displayRunGui(count))
-            {
+            if (gui.displayRunGui(count)) {
                 // Stop button pressed, go back to config screen
                 freeSimulation();
-                if (instanceVBORes)
-                {
+                if (instanceVBORes) {
                     cudaGraphicsUnregisterResource(instanceVBORes);
                     instanceVBORes = nullptr;
                 }
@@ -518,10 +590,8 @@ int main()
     }
 
     // Close out the simulation
-    if (currentState == STATE_RUNNING)
-        freeSimulation();
-    if (instanceVBORes)
-    {
+    if (currentState == STATE_RUNNING) freeSimulation();
+    if (instanceVBORes) {
         cudaGraphicsUnregisterResource(instanceVBORes);
         instanceVBORes = nullptr;
     }

@@ -1,86 +1,155 @@
-# Compilers
-NVCC := nvcc
-CXX  := g++
+# -----------------------------------------------------------------------------
+# HYBRID CROSS-PLATFORM MAKEFILE
+# -----------------------------------------------------------------------------
 
-# Output
-TARGET := simple_sph
+APP_NAME := simple_sph
 
-# Flags
-CUDA_PATH ?= /usr/local/cuda
-NVCCFLAGS := -O3 -std=c++14 -Iexternal/glfw-3.1.2/include -Iexternal/glm-0.9.7.1 -DGLFW_EXPOSE_NATIVE_GLX
+# -----------------------------------------------------------------------------
+# 1. OS DETECTION & COMPILER SETUP
+# -----------------------------------------------------------------------------
 
-CXXFLAGS  := -O3 -std=c++14 -Wall -I$(CUDA_PATH)/include -I./imgui -Iexternal/glfw-3.1.2/include -Iexternal/glm-0.9.7.1 -DGLFW_EXPOSE_NATIVE_GLX
+ifeq ($(OS),Windows_NT)
+    # --- WINDOWS (MSVC + NVCC) ---
+    TARGET_OS := Windows
+    TARGET    := $(APP_NAME).exe
+    OBJ_EXT   := obj
+    
+    # Compilers
+    NVCC := nvcc
+    CXX  := cl
+    
+    # Paths
+    ifndef CUDA_HOME
+        CUDA_HOME := C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6
+    endif
+    
+    GLEW_PATH := external/glew-2.1.0
+    GLFW_PATH := external/glfw-3.1.2
+    
+    # OUTPUT LOCATION FOR GLFW
+    GLFW_BUILD_DIR := $(GLFW_PATH)/build_msvc
+    GLFW_LIB_DIR   := $(GLFW_BUILD_DIR)/src
+    GLFW_LIB       := $(GLFW_LIB_DIR)/glfw3.lib
+    
+    # Includes
+    INCLUDES := -I"$(CUDA_HOME)/include" -I./imgui -I$(GLFW_PATH)/include -I$(GLEW_PATH)/include -Iexternal/glm-0.9.7.1
+    
+    # Flags for MSVC (cl.exe)
+    # Use hyphens (-) for flags to avoid path interpretation issues
+    CXXFLAGS := -O2 -std:c++14 -EHsc -MD -nologo $(INCLUDES) \
+                -DGLEW_STATIC -DGLFW_EXPOSE_NATIVE_WIN32 -DGLFW_EXPOSE_NATIVE_WGL
+    
+    # Flags for NVCC
+    # Use -MD to match MSVC runtime
+    NVCCFLAGS_WIN := -Xcompiler -MD
+                
+    # Libraries
+    LDFLAGS := -L$(GLFW_LIB_DIR) \
+               -lglfw3 -lopengl32 -lgdi32 -luser32 -lshell32 -lcudart_static
+    
+    COMPILE_CPP = $(CXX) $(CXXFLAGS) -c $< -Fo$@
+    
+    # GLFW BUILD COMMAND (Windows)
+    # FIX: Use forward slashes and && for compatibility with Make's shell (Git Bash/MinGW)
+    # Added -DCMAKE_BUILD_TYPE=Release to fix the MSVCRTD warning
+    BUILD_GLFW_CMD = mkdir -p $(GLFW_BUILD_DIR) && \
+                     cd $(GLFW_BUILD_DIR) && \
+                     cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release .. && \
+                     nmake
 
-GLFW_LIB := external/glfw-3.1.2/build/src
-GLFW_TARGET := $(GLFW_LIB)/libglfw3.a
+else
+    # --- LINUX (GCC + NVCC) ---
+    TARGET_OS := Linux
+    TARGET    := $(APP_NAME)
+    OBJ_EXT   := o
+    
+    NVCC := nvcc
+    CXX  := g++
+    
+    ifndef CUDA_HOME
+        CUDA_HOME := /usr/local/cuda
+    endif
 
-# Libraries
-LDFLAGS := -lGL -lGLEW -L$(GLFW_LIB) -lglfw3 -lX11 -lXi -lXrandr -lXinerama -lXcursor -lpthread -lcudart
+    GLFW_PATH := external/glfw-3.1.2
+    
+    GLFW_BUILD_DIR := $(GLFW_PATH)/build
+    GLFW_LIB_DIR   := $(GLFW_BUILD_DIR)/src
+    GLFW_LIB       := $(GLFW_LIB_DIR)/libglfw3.a
+    
+    INCLUDES := -I$(CUDA_HOME)/include -I./imgui -I$(GLFW_PATH)/include -Iexternal/glm-0.9.7.1
+    
+    CXXFLAGS := -O3 -std=c++14 -Wall $(INCLUDES) -DGLFW_EXPOSE_NATIVE_X11 -DGLFW_EXPOSE_NATIVE_GLX -DGLEW_STATIC
+    NVCCFLAGS_WIN := 
+    
+    LDFLAGS := -lGL -lGLEW -lglfw -lX11 -lXi -lXrandr -lXinerama -lXcursor -lpthread -lcudart
+    
+    COMPILE_CPP = $(CXX) $(CXXFLAGS) -c $< -o $@
+    
+    BUILD_GLFW_CMD = mkdir -p $(GLFW_BUILD_DIR) && \
+                     cd $(GLFW_BUILD_DIR) && \
+                     cmake -DCMAKE_BUILD_TYPE=Release .. && \
+                     make
+endif
 
-# CPP Source Files
-CUDA_SRC := sph_kernels.cu
-CPP_SRC  := main.cpp shaders.cpp SimWindow.cpp SimGui.cpp
-IMGUI_SRC := imgui/imgui.cpp imgui/imgui_draw.cpp imgui/imgui_tables.cpp imgui/imgui_widgets.cpp imgui/imgui_impl_glfw.cpp imgui/imgui_impl_opengl3.cpp
+# -----------------------------------------------------------------------------
+# 2. FILES & OBJECTS
+# -----------------------------------------------------------------------------
 
-# Object files
-CUDA_OBJ := sph_kernels.o
-CPP_OBJ  := main.o shaders.o SimWindow.o SimGui.o
-IMGUI_OBJ := $(IMGUI_SRC:.cpp=.o)
+CUDA_SRC  := sph_kernels.cu
+CPP_SRC   := main.cpp shaders.cpp SimWindow.cpp SimGui.cpp external/glew-2.1.0/src/glew.c
+IMGUI_SRC := imgui/imgui.cpp imgui/imgui_draw.cpp imgui/imgui_tables.cpp \
+             imgui/imgui_widgets.cpp imgui/imgui_impl_glfw.cpp imgui/imgui_impl_opengl3.cpp
 
-# Rules
-all: $(TARGET)
+CUDA_OBJ  := $(CUDA_SRC:.cu=.$(OBJ_EXT))
+CPP_OBJ   := $(CPP_SRC:.cpp=.$(OBJ_EXT))
+IMGUI_OBJ := $(IMGUI_SRC:.cpp=.$(OBJ_EXT))
 
-setup:
-	# Create imgui directory
-	mkdir -p imgui
+# NVCC Flags
+NVCCFLAGS := -O3 -std=c++14 $(INCLUDES) $(NVCCFLAGS_WIN)
 
-	# Download Core ImGui files
-	wget -O imgui/imgui.h 			https://raw.githubusercontent.com/ocornut/imgui/master/imgui.h
-	wget -O imgui/imgui.cpp 		https://raw.githubusercontent.com/ocornut/imgui/master/imgui.cpp
-	wget -O imgui/imgui_draw.cpp 	https://raw.githubusercontent.com/ocornut/imgui/master/imgui_draw.cpp
-	wget -O imgui/imgui_tables.cpp 	https://raw.githubusercontent.com/ocornut/imgui/master/imgui_tables.cpp
-	wget -O imgui/imgui_widgets.cpp	https://raw.githubusercontent.com/ocornut/imgui/master/imgui_widgets.cpp
-	wget -O imgui/imconfig.h		https://raw.githubusercontent.com/ocornut/imgui/master/imconfig.h
-	wget -O imgui/imgui_internal.h	https://raw.githubusercontent.com/ocornut/imgui/master/imgui_internal.h
-	wget -O imgui/imstb_rectpack.h	https://raw.githubusercontent.com/ocornut/imgui/master/imstb_rectpack.h
-	wget -O imgui/imstb_textedit.h	https://raw.githubusercontent.com/ocornut/imgui/master/imstb_textedit.h
-	wget -O imgui/imstb_truetype.h	https://raw.githubusercontent.com/ocornut/imgui/master/imstb_truetype.h
+# -----------------------------------------------------------------------------
+# 3. BUILD RULES
+# -----------------------------------------------------------------------------
 
-	# Download Backends (GLFW and OpenGL3)
-	wget -O imgui/imgui_impl_glfw.h				https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.h
-	wget -O imgui/imgui_impl_glfw.cpp			https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.cpp
-	wget -O imgui/imgui_impl_opengl3.h			https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.h
-	wget -O imgui/imgui_impl_opengl3.cpp		https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.cpp
-	wget -O imgui/imgui_impl_opengl3_loader.h 	https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3_loader.h
+all: info $(TARGET)
 
-# Build GLFW if not already built
-$(GLFW_TARGET):
-	@echo "Building GLFW..."
-	@mkdir -p external/glfw-3.1.2/build
-	@cd external/glfw-3.1.2/build && cmake .. && $(MAKE)
+info:
+	@echo "------------------------------------"
+	@echo "OS       : $(TARGET_OS)"
+	@echo "Target   : $(TARGET)"
+	@echo "GLFW Lib : $(GLFW_LIB)"
+	@echo "------------------------------------"
 
-$(TARGET): $(GLFW_TARGET) $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ)
+$(TARGET): $(GLFW_LIB) $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ)
 	$(NVCC) $(NVCCFLAGS) -o $@ $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ) $(LDFLAGS)
-# $(TARGET): $(CPP_OBJ) $(CUDA_OBJ) $(IMGUI_OBJ)
-# 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(LDFLAGS)
 
-# Generic rule for .cpp files (handles main.cpp and shaders.cpp)
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(GLFW_LIB):
+	@echo "--- Building GLFW Library ---"
+	$(BUILD_GLFW_CMD)
+	@echo "--- GLFW Build Complete ---"
 
-$(CUDA_OBJ): $(CUDA_SRC)
+%.$(OBJ_EXT): %.cpp
+	$(COMPILE_CPP)
+
+%.$(OBJ_EXT): %.c
+	$(COMPILE_CPP)
+
+%.$(OBJ_EXT): %.cu
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-imgui/%.o: imgui/%.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+imgui/%.$(OBJ_EXT): imgui/%.cpp
+	$(COMPILE_CPP)
 
 clean:
-	rm -f 	$(TARGET) \
-			*.o \
-			imgui/*.o \
-			imgui.ini
+	rm -f $(TARGET) *.$(OBJ_EXT) imgui/*.$(OBJ_EXT) imgui.ini
+	rm -rf external/glew-2.1.0/build
+	rm -rf external/glfw-3.1.2/build
+	rm -rf external/glfw-3.1.2/build_msvc
+	rm -rf external/glm-0.9.7.1/build
+	rm -f *.lib
+	rm -f *.exp
 
-run:
-	./simple_sph
+run: all
+	./$(TARGET)
 
-.PHONY: all clean
+.PHONY: all clean run info

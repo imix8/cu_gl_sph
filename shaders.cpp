@@ -22,7 +22,7 @@ uniform float radius;
 out float vMag; 
 void main() {
     vec3 worldPos = aPos * radius + aInstance.xyz; 
-    glPosition = projection * view * vec4(worldPos, 1.0);
+    gl_Position = projection * view * vec4(worldPos, 1.0);
     vMag = aInstance.w;
 }
 )";
