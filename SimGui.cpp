@@ -7,11 +7,18 @@
 #include "SimWindow.h"
 #include "SimGui.h"
 
-// Basic constructor
-SimGui::SimGui(SimWindow *window, SPHParams *params) 
+/**
+ * @brief  Constructor that initializes the gui and stores the necessary pointers
+ * 
+ * @param  window  SimWindow object for the program
+ * @param  params  Simulator parameter struct
+ * @param  cam     Simulator camera settings struct
+ */
+SimGui::SimGui(SimWindow *window, SPHParams *params, Camera *cam) 
 {
     this->window = window;
     this->params = params;
+    this->cam = cam;
 
     // --- ImGui Init ---
     IMGUI_CHECKVERSION();
@@ -21,12 +28,19 @@ SimGui::SimGui(SimWindow *window, SPHParams *params)
     ImGui_ImplOpenGL3_Init(window->glsl_version);
 }
 
-// Get the simulator parameters
+/**
+ * @brief  Getter for the simulator parameters struct
+ * 
+ * @return ptr to the sim params struct
+ */
 SPHParams* SimGui::getParams()
 {
     return params;
 }
 
+/**
+ * @brief  Initialize a new ImGui, OpenGL, and GLFW frame for the program
+ */
 void SimGui::createFrame()
 {
     ImGui_ImplOpenGL3_NewFrame();
@@ -34,8 +48,16 @@ void SimGui::createFrame()
     ImGui::NewFrame();
 }
 
-bool SimGui::displayConfigGui(Camera *cam)
+/**
+ * @brief  Display the pre-run config gui for the user
+ * 
+ * When the user changes a slider in the gui, the params struct for the simulator is updated
+ * 
+ * @return true if the user pressed the RUN button, else false
+ */
+bool SimGui::displayConfigGui()
 {
+    // Create all the UI elements and connect them to values (ie. sliders for config values)
     ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(400, 450), ImGuiCond_FirstUseEver);
     ImGui::Begin("Detailed SPH Setup");
@@ -60,6 +82,7 @@ bool SimGui::displayConfigGui(Camera *cam)
 
     ImGui::Dummy(ImVec2(0, 20));
 
+    // Check if the user presses the run button
     bool btnHit = false;
     if (ImGui::Button("INITIALIZE & RUN", ImVec2(-1, 50)))
     {
@@ -75,18 +98,28 @@ bool SimGui::displayConfigGui(Camera *cam)
     return btnHit;
 }
 
-bool SimGui::displayRunGui(Camera *cam, int frame_count)
+/**
+ * @brief  Display the runtime config gui for the user
+ * 
+ * When the user changes a slider in the gui, the params struct for the simulator is updated
+ * 
+ * @return true if the user pressed the STOP button, else false
+ */
+bool SimGui::displayRunGui(int frame_count)
 {
+    // Create the UI elements and display some live data about the simulation
     ImGui::SetNextWindowPos(ImVec2(10, 10));
     ImGui::Begin("Live Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::Text("FPS: %.1f | N: %d", ImGui::GetIO().Framerate, frame_count);
 
+    // Check if the user presses the STOP button
     bool btnHit = false;
     if (ImGui::Button("STOP / CONFIG"))
     {
         btnHit = true;
     }
 
+    // Button to reset the camera view
     if (ImGui::Button("Reset Camera View")) {
         cam->cam_dist = 2.5f;
         cam->cam_yaw = -45.0f;
@@ -95,12 +128,13 @@ bool SimGui::displayRunGui(Camera *cam, int frame_count)
 
     ImGui::Separator();
 
-    const char* btnLabel = (cam->currentColorMode == 0) ? "Color: PLASMA" : "Color: BLUE";
-
-    if (ImGui::Button(btnLabel)) {
+    // Button to change the color of the points
+    const char* colorBtn = (cam->currentColorMode == 0) ? "Color: PLASMA" : "Color: BLUE";
+    if (ImGui::Button(colorBtn)) {
         cam->currentColorMode = !cam->currentColorMode;
     }
 
+    // More UI config elements
     ImGui::Text("Live Tuning (Tweak safely!)");
     ImGui::SliderFloat("Gravity", &(params->gravity), -50.0f, 50.0f);
     ImGui::SliderFloat("Stiffness", &(params->stiffness), 1.0f, 50.0f);
@@ -114,6 +148,9 @@ bool SimGui::displayRunGui(Camera *cam, int frame_count)
     return btnHit;
 }
 
+/**
+ * @brief  Render the current gui in the window
+ */
 void SimGui::render()
 {
     ImGui::Render();

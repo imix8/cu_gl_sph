@@ -6,7 +6,6 @@
 #pragma once
 
 #include "sph_interop.h"
-
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -17,19 +16,24 @@ private:
     // Private member data
     SimWindow *window;
     SPHParams *params;
+    Camera    *cam;
 
 public:
     // Basic constructor
-    SimGui(SimWindow *window, SPHParams *params);
+    SimGui(SimWindow *window, SPHParams *params, Camera *cam);
 
-    // Get the simulator parameters
+    // Getter for the simulator parameters struct
     SPHParams* getParams();
 
+    // Initialize a new ImGui, OpenGL, and GLFW frame for the program
     void createFrame();
 
-    bool displayConfigGui(Camera *cam);
+    // Display the pre-run config gui for the user
+    bool displayConfigGui();
 
-    bool displayRunGui(Camera *cam, int frame_count);
+    // Display the runtime config gui for the user
+    bool displayRunGui(int frame_count);
 
+    // Render the gui
     void render();
 };

@@ -31,10 +31,10 @@ AppState currentState = STATE_CONFIG;
 // The Master Parameter Struct
 SPHParams params;
 
+// Camera Control Globals
 Camera cam;
 float lastX = 400, lastY = 300;
 bool firstMouse = true;
-
 
 // ---------------- Input Callbacks ----------------
 
@@ -178,7 +178,7 @@ int main()
     GLFWwindow *window = simWindow.getWindow();
 
     // Init the gui backend
-    SimGui gui(&simWindow, &params);
+    SimGui gui(&simWindow, &params, &cam);
    
     // Debug info on GL driver (helps diagnose CUDA interop availability)
     const GLubyte *vendor = glGetString(GL_VENDOR);
@@ -276,7 +276,7 @@ int main()
         // ----------------------------------------------------
         //  Configure Simulator Before Running
         // ----------------------------------------------------
-        if (currentState == STATE_CONFIG && gui.displayConfigGui(&cam))
+        if (currentState == STATE_CONFIG && gui.displayConfigGui())
         {
             host_data.resize(params.particle_count * 4);
 
@@ -453,7 +453,7 @@ int main()
             // ----------------------------------------------------
             // 6. Runtime UI
             // ----------------------------------------------------
-            if (gui.displayRunGui(&cam, count))
+            if (gui.displayRunGui(count))
             {
                 // Stop button pressed, go back to config screen
                 freeSimulation();

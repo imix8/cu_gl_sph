@@ -1,7 +1,7 @@
 /* 
     Class: ECE6122 
     Last Date Modified: 12/1/25
-    Description: Class to house common OpenGL operations using GLFW and input callback functions
+    Description: Class implimentation to house common OpenGL operations using GLFW
 */
 
 #include "SimWindow.h"
@@ -22,7 +22,6 @@ SimWindow::SimWindow(int width, int height)
         std::cerr << "Failed to initialize GLFW" << std::endl;
         throw std::runtime_error("");
     }
-    
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -47,7 +46,11 @@ SimWindow::SimWindow(int width, int height)
     }
 }
 
-// Get the window
+/**
+ * @brief  Get the window private member value
+ * 
+ * @return window of type GLFWwindow*
+ */
 GLFWwindow* SimWindow::getWindow()
 {
     return window;

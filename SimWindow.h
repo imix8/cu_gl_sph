@@ -1,7 +1,7 @@
 /* 
     Class: ECE6122 
     Last Date Modified: 12/1/25
-    Description: Class to house common OpenGL operations using GLFW and input callback functions
+    Description: Class header to house common OpenGL operations using GLFW
 */
 #pragma once
 
