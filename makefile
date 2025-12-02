@@ -8,25 +8,23 @@ TARGET := simple_sph
 # Flags
 CUDA_PATH ?= /usr/local/cuda
 NVCCFLAGS := -O3 -std=c++14 -Iexternal/glfw-3.1.2/include -Iexternal/glm-0.9.7.1 -DGLFW_EXPOSE_NATIVE_GLX
-# Added -I./imgui
+
 CXXFLAGS  := -O3 -std=c++14 -Wall -I$(CUDA_PATH)/include -I./imgui -Iexternal/glfw-3.1.2/include -Iexternal/glm-0.9.7.1 -DGLFW_EXPOSE_NATIVE_GLX
 
 GLFW_LIB := external/glfw-3.1.2/build/src
 GLFW_TARGET := $(GLFW_LIB)/libglfw3.a
+
 # Libraries
 LDFLAGS := -lGL -lGLEW -L$(GLFW_LIB) -lglfw3 -lX11 -lXi -lXrandr -lXinerama -lXcursor -lpthread -lcudart
 
-# Files
+# CPP Source Files
 CUDA_SRC := sph_kernels.cu
-# ADDED shaders.cpp here
-CPP_SRC  := main.cpp shaders.cpp 
-# ImGui Sources
+CPP_SRC  := main.cpp shaders.cpp SimWindow.cpp SimGui.cpp
 IMGUI_SRC := imgui/imgui.cpp imgui/imgui_draw.cpp imgui/imgui_tables.cpp imgui/imgui_widgets.cpp imgui/imgui_impl_glfw.cpp imgui/imgui_impl_opengl3.cpp
 
 # Object files
 CUDA_OBJ := sph_kernels.o
-# Updated to compile main.o and shaders.o
-CPP_OBJ  := main.o shaders.o 
+CPP_OBJ  := main.o shaders.o SimWindow.o SimGui.o
 IMGUI_OBJ := $(IMGUI_SRC:.cpp=.o)
 
 # Rules
@@ -77,7 +75,10 @@ imgui/%.o: imgui/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET) *.o imgui/*.o imgui.ini
+	rm -f 	$(TARGET) \
+			*.o \
+			imgui/*.o \
+			imgui.ini
 
 run:
 	./simple_sph

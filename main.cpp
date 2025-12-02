@@ -1,3 +1,10 @@
+/* 
+    Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
+    Class: ECE6122 
+    Last Date Modified: 12/1/25
+    Description: SPH Fluid Simulation Main Program
+*/
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -14,8 +21,11 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "shaders.h" // <--- Include the new header
+#include "shaders.h"
 #include "sph_interop.h"
+
+#include "SimWindow.h"
+#include "SimGui.h"
 
 // ---------------- Application State ----------------
 enum AppState
@@ -28,23 +38,23 @@ AppState currentState = STATE_CONFIG;
 // The Master Parameter Struct
 SPHParams params;
 
-// Camera Globals
-float cam_dist = 2.5f;
-float cam_yaw = -45.0f;
-float cam_pitch = 30.0f;
+// Camera/Mouse Control Globals
+Camera cam;
 float lastX = 400, lastY = 300;
 bool firstMouse = true;
-int currentColorMode = 0;  // 0 = Plasma, 1 = Blue
 
 // ---------------- Input Callbacks ----------------
+extern void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow *window, double x, double y);
+extern void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow *window, int button, int action, int mods);
+extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow *window, double xoffset, double yoffset);
 
-extern void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow *window, double x,
-                                             double y);
-extern void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow *window, int button,
-                                               int action, int mods);
-extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow *window, double xoffset,
-                                          double yoffset);
-
+/**
+ * @brief Callback function to get the position of the mouse and rotate the camera accordingly
+ * 
+ * @param  window  program window
+ * @param  xpos  x coordinate of the mouse
+ * @param  ypos  y coordinate of the mouse
+ */
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
     ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
@@ -60,50 +70,59 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
     lastX = xpos;
     lastY = ypos;
 
+    // When pressing mouse1, rotate the camera
     if (currentState == STATE_RUNNING && !ImGui::GetIO().WantCaptureMouse)
     {
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
             float sensitivity = 0.5f;
-            cam_yaw += xoffset * sensitivity;
-            cam_pitch += yoffset * sensitivity;
+            cam.cam_yaw += xoffset * sensitivity;
+            cam.cam_pitch += yoffset * sensitivity;
 
-            if (cam_pitch > 89.0f)
-                cam_pitch = 89.0f;
-            if (cam_pitch < -89.0f)
-                cam_pitch = -89.0f;
+            if (cam.cam_pitch > 89.0f)
+                cam.cam_pitch = 89.0f;
+            if (cam.cam_pitch < -89.0f)
+                cam.cam_pitch = -89.0f;
         }
     }
 }
-
-void mouse_button_callback(GLFWwindow *window, int button, int action,
-                           int mods)
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
     ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 }
 
+/**
+ * @brief  Callback function to zoom the camera in/out on mouse scroll
+ */
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
     ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
 
     if (!ImGui::GetIO().WantCaptureMouse && currentState == STATE_RUNNING)
     {
-        cam_dist -= (float)yoffset * 0.1f;
-        if (cam_dist < 0.1f)
-            cam_dist = 0.1f;
-        if (cam_dist > 5.0f)
-            cam_dist = 5.0f;
+        cam.cam_dist -= (float)yoffset * 0.1f;
+        if (cam.cam_dist < 0.1f)
+            cam.cam_dist = 0.1f;
+        if (cam.cam_dist > 5.0f)
+            cam.cam_dist = 5.0f;
     }
 }
 
 // ---------------- Mesh Utils ----------------
 
-void createSphere(std::vector<float> &vertices,
-                  std::vector<unsigned int> &indices)
+/**
+ * @brief  Create a sphere object in OpenGL
+ * 
+ * @param  verticies  global vector of all verticies to be drawn
+ * @param  indicies  global vector of all indicides to be drawn
+ */
+void createSphere(std::vector<float> &vertices, std::vector<unsigned int> &indices)
 {
     const int X_SEGMENTS = 12;
     const int Y_SEGMENTS = 12;
     const float PI = 3.14159265359f;
+    
+    // Create the verticies of the sphere
     for (int y = 0; y <= Y_SEGMENTS; ++y)
     {
         for (int x = 0; x <= X_SEGMENTS; ++x)
@@ -118,53 +137,64 @@ void createSphere(std::vector<float> &vertices,
             vertices.push_back(zPos);
         }
     }
+
+    // Create the indicies of the sphere
     for (int y = 0; y < Y_SEGMENTS; ++y)
     {
         for (int x = 0; x < X_SEGMENTS; ++x)
         {
-            indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
-            indices.push_back(y * (X_SEGMENTS + 1) + x);
-            indices.push_back(y * (X_SEGMENTS + 1) + x + 1);
-            indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
-            indices.push_back(y * (X_SEGMENTS + 1) + x + 1);
-            indices.push_back((y + 1) * (X_SEGMENTS + 1) + x + 1);
+            indices.push_back((y + 1) * (X_SEGMENTS + 1) +  x     );
+            indices.push_back( y      * (X_SEGMENTS + 1) +  x     );
+            indices.push_back( y      * (X_SEGMENTS + 1) + (x + 1));
+            indices.push_back((y + 1) * (X_SEGMENTS + 1) +  x     );
+            indices.push_back( y      * (X_SEGMENTS + 1) + (x + 1));
+            indices.push_back((y + 1) * (X_SEGMENTS + 1) + (x + 1));
         }
     }
 }
 
-// NEW: Wireframe Cylinder Generator
-void createWireCylinder(std::vector<float>& vertices,
-                        std::vector<unsigned int>& indices) {
+/**
+ * @brief  Create a wire-frame cylinder object in OpenGL
+ * 
+ * @param  verticies  global vector of all verticies to be drawn
+ * @param  indicies  global vector of all indicides to be drawn
+ */
+void createWireCylinder(std::vector<float>& vertices, std::vector<unsigned int>& indices) {
     const int SEGMENTS = 24;
     const float PI = 3.14159265359f;
 
-    // Create vertices for Top and Bottom Rings
-    for (int i = 0; i < SEGMENTS; i++) {
+    // Create vertices for top and bottom rings
+    for (int i = 0; i < SEGMENTS; i++)
+    {
         float angle = (float)i / SEGMENTS * 2.0f * PI;
         float x = cos(angle);
         float y = sin(angle);
 
-        // Vert 2*i: Bottom (z=0)
+        // Bottom (z=0)
         vertices.push_back(x);
         vertices.push_back(y);
         vertices.push_back(0.0f);
-        // Vert 2*i+1: Top (z=1)
+
+        // Top (z=1)
         vertices.push_back(x);
         vertices.push_back(y);
         vertices.push_back(1.0f);
     }
 
-    // Create Line Indices
-    for (int i = 0; i < SEGMENTS; i++) {
+    // Create side wall line indices
+    for (int i = 0; i < SEGMENTS; i++)
+    {
         int base = i * 2;
         int next = ((i + 1) % SEGMENTS) * 2;
 
         // Bottom Ring
         indices.push_back(base);
         indices.push_back(next);
+
         // Top Ring
         indices.push_back(base + 1);
         indices.push_back(next + 1);
+        
         // Vertical Connector (every 4th segment to keep it clean)
         if (i % 4 == 0) {
             indices.push_back(base);
@@ -176,34 +206,15 @@ void createWireCylinder(std::vector<float>& vertices,
 // ---------------- Main ----------------
 int main()
 {
-    if (!glfwInit())
-    {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
-        return -1;
-    }
+    // Create a window for the program
+    int window_width = 1280;
+    int window_height = 800;
+    SimWindow simWindow(window_width, window_height);
+    GLFWwindow *window = simWindow.getWindow();
 
-    const char *glsl_version = "#version 330";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    GLFWwindow *window =
-        glfwCreateWindow(1280, 800, "SPH Simulation", NULL, NULL);
-    if (!window)
-    {
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return -1;
-    }
-    glfwMakeContextCurrent(window);
-
-    GLenum glewErr = glewInit();
-    if (glewErr != GLEW_OK)
-    {
-        std::cerr << "Failed to initialize GLEW: " << glewGetErrorString(glewErr) << std::endl;
-        glfwTerminate();
-        return -1;
-    }
+    // Init the gui backend
+    SimGui gui(&simWindow, &params, &cam);
+   
     // Debug info on GL driver (helps diagnose CUDA interop availability)
     const GLubyte *vendor = glGetString(GL_VENDOR);
     const GLubyte *renderer = glGetString(GL_RENDERER);
@@ -219,35 +230,27 @@ int main()
         }
     }
 
-    // --- ImGui Init ---
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(glsl_version);
-
     // --- Callbacks ---
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
     // --- Resources ---
-    // NEW: Load shaders from the separate file
+    // Load shaders from the separate file
     GLuint program = createShaderProgram();
 
-    // 1. SPHERE MESH
+    // Fluid Particle Sphere Mesh
     std::vector<float> sphereVerts;
     std::vector<unsigned int> sphereIndices;
     createSphere(sphereVerts, sphereIndices);
 
-    // 2. WIRE CYLINDER MESH (NEW)
+    // Stirring Cylinder Mesh
     std::vector<float> cylVerts;
     std::vector<unsigned int> cylIndices;
     createWireCylinder(cylVerts, cylIndices);
 
     unsigned int VAO, VBO, EBO, VBO_Inst;
     unsigned int cylVAO, cylVBO, cylEBO;
-
     cudaGraphicsResource *instanceVBORes = nullptr;
     bool useInterop = true;
     
@@ -256,192 +259,167 @@ int main()
     glGenBuffers(1, &EBO);
     glGenBuffers(1, &VBO_Inst);
 
+    // Sphere Buffers
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sphereVerts.size() * sizeof(float),
-                 sphereVerts.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sphereVerts.size() * sizeof(float), sphereVerts.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(int),
-                 sphereIndices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float),
-                          (void *)0);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(int), sphereIndices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
     // Instance Buffer
     glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                          (void *)0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(1);
     glVertexAttribDivisor(1, 1);
 
-    // Setup Cylinder Buffers
+    // Cylinder Buffers
     glGenVertexArrays(1, &cylVAO);
     glGenBuffers(1, &cylVBO);
     glGenBuffers(1, &cylEBO);
     glBindVertexArray(cylVAO);
     glBindBuffer(GL_ARRAY_BUFFER, cylVBO);
-    glBufferData(GL_ARRAY_BUFFER, cylVerts.size() * sizeof(float),
-                 cylVerts.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, cylVerts.size() * sizeof(float), cylVerts.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cylEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, cylIndices.size() * sizeof(int),
-                 cylIndices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float),
-                          (void*)0);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, cylIndices.size() * sizeof(int), cylIndices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    // Enable Attr 1 for shader compatibility
-    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(1); // Enable Attr 1 for shader compatibility
 
     glEnable(GL_DEPTH_TEST);
 
     std::vector<float> host_data; // no longer used for uploads; kept for sizing state
 
-    // --- Loop ---
+    // ----------------------------------------------------
+    //  Main Loop
+    // ----------------------------------------------------
     while (!glfwWindowShouldClose(window))
     {
+        // Set the background and UI
         glfwPollEvents();
         glClearColor(0.95f, 0.95f, 0.95f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        gui.createFrame();
 
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
-        if (currentState == STATE_CONFIG)
+        // ----------------------------------------------------
+        //  Configure Simulator Before Running
+        // ----------------------------------------------------
+        if (currentState == STATE_CONFIG && gui.displayConfigGui())
         {
-            ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize(ImVec2(400, 450), ImGuiCond_FirstUseEver);
-            ImGui::Begin("Detailed SPH Setup");
+            host_data.resize(params.particle_count * 4);
 
-            ImGui::TextColored(ImVec4(1, 1, 0, 1), "Core Settings");
-            ImGui::SliderInt("Particles", &params.particle_count, 100, 20000);
-            ImGui::SliderFloat("Time Step", &params.dt, 0.001f, 0.01f, "%.4f");
-            ImGui::SliderFloat("Visual Size", &params.visual_radius, 0.005f,
-                               0.05f);
+            glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
+            glBufferData(GL_ARRAY_BUFFER,
+                         params.particle_count * sizeof(float) * 4, NULL,
+                         GL_DYNAMIC_DRAW);
 
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0, 1, 1, 1), "Physics Parameters");
-            ImGui::SliderFloat("Smooth Rad (h)", &params.h, 0.02f, 0.2f);
-            ImGui::SliderFloat("Mass", &params.mass, 0.001f, 0.1f);
-            ImGui::SliderFloat("Rest Density", &params.rest_density, 0.1f,
-                               2000.0f);
-            ImGui::SliderFloat("Stiffness (k)", &params.stiffness, 1.0f, 50.0f);
-
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Environment");
-            ImGui::SliderFloat("Gravity", &params.gravity, -100.0f, 100.0f);
-            ImGui::SliderFloat("Wall Damp", &params.damping, -0.99f, -0.1f);
-            ImGui::SliderFloat("Box Size", &params.box_size, 0.5f, 5.0f);
-
-            ImGui::Dummy(ImVec2(0, 20));
-
-            if (ImGui::Button("INITIALIZE & RUN", ImVec2(-1, 50)))
+            // Register instance buffer with CUDA for direct writes
+            cudaError_t cErr = cudaGraphicsGLRegisterBuffer(&instanceVBORes, VBO_Inst, cudaGraphicsRegisterFlagsWriteDiscard);
+            if (cErr != cudaSuccess)
             {
-                host_data.resize(params.particle_count * 4);
-
-                glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
-                glBufferData(GL_ARRAY_BUFFER,
-                             params.particle_count * sizeof(float) * 4, NULL,
-                             GL_DYNAMIC_DRAW);
-
-                // Register instance buffer with CUDA for direct writes
-                cudaError_t cErr = cudaGraphicsGLRegisterBuffer(&instanceVBORes, VBO_Inst, cudaGraphicsRegisterFlagsWriteDiscard);
-                if (cErr != cudaSuccess)
-                {
-                    std::cerr << "cudaGraphicsGLRegisterBuffer failed: " << cudaGetErrorString(cErr) << std::endl;
-                    instanceVBORes = nullptr;
-                    useInterop = false;
-                }
-                else
-                {
-                    useInterop = true;
-                }
-
-                // Initialize CUDA simulation after interop resource is set up
-                initSimulation(&params);
-
-                // Reset Camera
-                cam_dist = 2.5f;
-                cam_yaw = -45.0f;
-                cam_pitch = 30.0f;
-
-                currentState = STATE_RUNNING;
+                std::cerr << "cudaGraphicsGLRegisterBuffer failed: " << cudaGetErrorString(cErr) << std::endl;
+                instanceVBORes = nullptr;
+                useInterop = false;
             }
-            ImGui::End();
+            else
+            {
+                useInterop = true;
+            }
+
+            // Initialize CUDA simulation after interop resource is set up
+            initSimulation(&params);
+
+            currentState = STATE_RUNNING;
         }
+
+        // ----------------------------------------------------
+        //  Run Simulation
+        // ----------------------------------------------------
         else if (currentState == STATE_RUNNING)
         {
             // ----------------------------------------------------
-            // 1. Calculate Camera Matrices EARLY (Needed for Raycast)
+            // 1. Calculate Camera Matrices from User Controls
             // ----------------------------------------------------
             int width, height;
             glfwGetWindowSize(window, &width, &height);
 
-            glm::vec3 target(params.box_size / 2.0f, params.box_size / 2.0f,
-                             params.box_size / 2.0f);
-            float ry = glm::radians(cam_yaw);
-            float rp = glm::radians(cam_pitch);
-            glm::vec3 pos = target + glm::vec3(cam_dist * cos(rp) * cos(ry),
-                                               cam_dist * cos(rp) * sin(ry),
-                                               cam_dist * sin(rp));
+            glm::vec3 target(params.box_size / 2.0f, params.box_size / 2.0f, params.box_size / 2.0f);
+            float ry = glm::radians(cam.cam_yaw);
+            float rp = glm::radians(cam.cam_pitch);
+            glm::vec3 pos = target + glm::vec3(
+                cam.cam_dist * cos(rp) * cos(ry),
+                cam.cam_dist * cos(rp) * sin(ry),
+                cam.cam_dist * sin(rp)
+            );
 
             glm::mat4 view = glm::lookAt(pos, target, glm::vec3(0, 0, 1));
+            
             glm::mat4 proj = glm::perspective(
-                glm::radians(45.0f), (float)width / height, 0.1f, 100.0f);
+                glm::radians(45.0f),    // 45 degree FOV
+                (float)width / height,  // aspect ratio
+                0.1f,                   // near clipping plane
+                100.0f                  // far clipping plane
+            );
 
             // ----------------------------------------------------
             // 2. Interaction Logic: Ray-Plane Intersection
             // ----------------------------------------------------
             params.is_interacting = 0;
-            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) ==
-                    GLFW_PRESS &&
-                !ImGui::GetIO().WantCaptureMouse) {
+            if ((glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) && !ImGui::GetIO().WantCaptureMouse) {
                 double mx, my;
                 glfwGetCursorPos(window, &mx, &my);
 
                 // Unproject mouse at near (z=0) and far (z=1)
-                glm::vec3 start =
-                    glm::unProject(glm::vec3(mx, height - my, 0.0f), view, proj,
-                                   glm::vec4(0, 0, width, height));
-                glm::vec3 end =
-                    glm::unProject(glm::vec3(mx, height - my, 1.0f), view, proj,
-                                   glm::vec4(0, 0, width, height));
+                glm::vec3 start = glm::unProject(
+                    glm::vec3(mx, height - my, 0.0f),
+                    view,
+                    proj,
+                    glm::vec4(0, 0, width, height)
+                );
+                glm::vec3 end = glm::unProject(
+                    glm::vec3(mx, height - my, 1.0f),
+                    view,
+                    proj,
+                    glm::vec4(0, 0, width, height)
+                );
                 glm::vec3 dir = glm::normalize(end - start);
 
                 // Plane Equation: Z = BoxSize / 2
-                // We intersect the ray with the horizontal plane in the middle
-                // of the fluid
+                // We intersect the ray with the horizontal plane in the middle of the fluid
                 float planeZ = params.box_size * 0.5f;
                 glm::vec3 normal(0, 0, 1);
                 float denom = glm::dot(dir, normal);
 
                 if (std::abs(denom) > 0.0001f) {
-                    float t =
-                        glm::dot(glm::vec3(0, 0, planeZ) - start, normal) /
-                        denom;
+                    float t = glm::dot(glm::vec3(0, 0, planeZ) - start, normal) / denom;
+
                     if (t >= 0) {
                         glm::vec3 worldPos = start + dir * t;
 
                         // Clamp to box bounds
-                        params.interact_x =
-                            glm::clamp(worldPos.x, 0.0f, params.box_size);
-                        params.interact_y =
-                            glm::clamp(worldPos.y, 0.0f, params.box_size);
-                        // IMPORTANT: Capture the Z depth!
-                        params.interact_z =
-                            glm::clamp(worldPos.z, 0.0f, params.box_size);
+                        params.interact_x = glm::clamp(worldPos.x, 0.0f, params.box_size);
+                        params.interact_y = glm::clamp(worldPos.y, 0.0f, params.box_size);
+                        params.interact_z = glm::clamp(worldPos.z, 0.0f, params.box_size);
 
                         params.is_interacting = 1;
                     }
                 }
             }
 
+            // ----------------------------------------------------
             // 3. Physics Step
+            // ----------------------------------------------------
             float cmin = 0.0f, cmax = 1.0f;
             int count = 0;
+
+            // Use interop to send simulation data directly between CUDA and OpenGL, without an extra CPU step
             if (useInterop && instanceVBORes)
             {
                 count = stepSimulation(instanceVBORes, &params, &cmin, &cmax);
             }
+
+            // If interop is not available, do extra data transfers between CPU and GPU
             else
             {
                 // Fallback path: compute and upload via CPU
@@ -450,70 +428,46 @@ int main()
                 glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4, host_data.data());
             }
 
-            // // ----------------------------------------------------
-            // // 3. Physics Step
-            // // ----------------------------------------------------
-            // int count = stepSimulation(host_data.data(), &params);
-
-            // // ----------------------------------------------------
-            // // 4. Render Particles
-            // // ----------------------------------------------------
-            // glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
-            // glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4,
-            //                 host_data.data());
-
-            // 2. Upload Data (now written directly by CUDA into VBO)
-
+            // ----------------------------------------------------
+            // 4. Upload data
+            // ----------------------------------------------------
             glUseProgram(program);
 
             // Auto-Contrast from GPU-reduced values
-
             glUniform1f(glGetUniformLocation(program, "vmin"), cmin);
             glUniform1f(glGetUniformLocation(program, "vmax"), cmax);
-            glUniform1f(glGetUniformLocation(program, "radius"),
-                        params.visual_radius);
-            glUniform1i(glGetUniformLocation(program, "colorMode"),
-                        currentColorMode);
+            glUniform1f(glGetUniformLocation(program, "radius"), params.visual_radius);
+            glUniform1i(glGetUniformLocation(program, "colorMode"), cam.currentColorMode);
 
-            glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1,
-                               GL_FALSE, glm::value_ptr(view));
-            glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1,
-                               GL_FALSE, glm::value_ptr(proj));
+            glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+            glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE, glm::value_ptr(proj));
 
             glBindVertexArray(VAO);
-            glDrawElementsInstanced(GL_TRIANGLES, sphereIndices.size(),
-                                    GL_UNSIGNED_INT, 0, count);
+            glDrawElementsInstanced(GL_TRIANGLES, sphereIndices.size(), GL_UNSIGNED_INT, 0, count);
 
             // ----------------------------------------------------
             // 5. Render Interaction Cylinder (Wireframe)
             // ----------------------------------------------------
             if (params.is_interacting) {
                 // Set radius uniform to the interaction radius
-                glUniform1f(glGetUniformLocation(program, "radius"),
-                            params.interact_radius);
+                glUniform1f(glGetUniformLocation(program, "radius"), params.interact_radius);
+
                 // Hack: Set vmin/vmax to 0/1, and pass a huge vMag (1000) in
                 // the attribute to force the color to the max value
-                // (White/Yellow)
                 glUniform1f(glGetUniformLocation(program, "vmin"), 0.0f);
                 glUniform1f(glGetUniformLocation(program, "vmax"), 1.0f);
 
                 glBindVertexArray(cylVAO);
 
-                // IMPORTANT: Disable the instanced attribute array (Loc 1)
-                // so we can pass manual data via glVertexAttrib4f
+                // Disable the instanced attribute array (Loc 1) so we can pass manual data via glVertexAttrib4f
                 glDisableVertexAttribArray(1);
                 glDisable(GL_DEPTH_TEST);  // Draw on top of fluid
 
-                // Draw a stack of wire cylinders to visualize the column
-                // The physics is a sphere, but the visual helps locate the
-                // mouse in 3D
+                // Draw a stack of wire cylinders to visualize the stirring column
                 for (int k = 0; k < 10; k++) {
                     float z = (params.box_size / 10.0f) * k;
-                    // Pass: x, y, z, vMag (1000.0f for bright color)
-                    glVertexAttrib4f(1, params.interact_x, params.interact_y, z,
-                                     1000.0f);
-                    glDrawElements(GL_LINES, cylIndices.size(), GL_UNSIGNED_INT,
-                                   0);
+                    glVertexAttrib4f(1, params.interact_x, params.interact_y, z, 1000.0f); // Pass vMag (1000.0f for bright color)
+                    glDrawElements(GL_LINES, cylIndices.size(), GL_UNSIGNED_INT, 0);
                 }
 
                 // Restore state
@@ -524,13 +478,9 @@ int main()
             // ----------------------------------------------------
             // 6. Runtime UI
             // ----------------------------------------------------
-            ImGui::SetNextWindowPos(ImVec2(10, 10));
-            ImGui::Begin("Live Controls", NULL,
-                         ImGuiWindowFlags_AlwaysAutoResize);
-            ImGui::Text("FPS: %.1f | N: %d", ImGui::GetIO().Framerate, count);
-
-            if (ImGui::Button("STOP / CONFIG"))
+            if (gui.displayRunGui(count))
             {
+                // Stop button pressed, go back to config screen
                 freeSimulation();
                 if (instanceVBORes)
                 {
@@ -539,39 +489,14 @@ int main()
                 }
                 currentState = STATE_CONFIG;
             }
-
-            if (ImGui::Button("Reset Camera View")) {
-                cam_dist = 2.5f;
-                cam_yaw = -45.0f;
-                cam_pitch = 30.0f;
-            }
-
-            ImGui::Separator();
-
-            const char* btnLabel =
-                (currentColorMode == 0) ? "Color: PLASMA" : "Color: OCEAN BLUE";
-            if (ImGui::Button(btnLabel)) {
-                currentColorMode =
-                    !currentColorMode;  // Toggles between 0 and 1
-            }
-
-            ImGui::Text("Live Tuning (Tweak safely!)");
-            ImGui::SliderFloat("Gravity", &params.gravity, -50.0f, 50.0f);
-            ImGui::SliderFloat("Stiffness", &params.stiffness, 1.0f, 50.0f);
-            ImGui::SliderFloat("Damping", &params.damping, -1.0f, -0.1f);
-
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(1, 0, 1, 1), "Interaction (Right Click)");
-            ImGui::SliderFloat("Radius", &params.interact_radius, 0.05f, 0.5f);
-
-            ImGui::End();
         }
 
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        // Render the gui and next frame
+        gui.render();
         glfwSwapBuffers(window);
     }
 
+    // Close out the simulation
     if (currentState == STATE_RUNNING)
         freeSimulation();
     if (instanceVBORes)

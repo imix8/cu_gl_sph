@@ -1,6 +1,21 @@
+/* 
+    Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
+    Class: ECE6122 
+    Last Date Modified: 12/1/25
+    Description: Header file for simulation utilities
+*/
+
 #pragma once
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
+
+// Camera Globals
+struct Camera {
+    float cam_dist = 2.5f;
+    float cam_yaw = -45.0f;
+    float cam_pitch = 30.0f;
+    int currentColorMode = 0;  // 0 = Plasma, 1 = Blue
+};
 
 // A container for all our tunable parameters
 struct SPHParams
@@ -20,8 +35,8 @@ struct SPHParams
     float gravity = -40.0f;
     float box_size = 1.0f;
 
-    // --- NEW: Interaction Parameters ---
-    int is_interacting = 0;  // 0 = false, 1 = true
+    // Interaction Parameters
+    int is_interacting = 0;
     float interact_x = 0.0f;
     float interact_y = 0.0f;
     float interact_z = 0.0f;

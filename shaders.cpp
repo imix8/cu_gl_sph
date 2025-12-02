@@ -1,10 +1,17 @@
+/* 
+    Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
+    Class: ECE6122
+    Last Date Modified: 12/1/25
+    Description: Shader source code for loading and coloring objects in the simulator
+*/
+
 #include "shaders.h"
 
 #include <iostream>
 #include <vector>
 
 // ---------------- SHADER SOURCES ----------------
-
+// Vertex shader source code
 const char* vertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;      
@@ -20,8 +27,7 @@ void main() {
 }
 )";
 
-// In shaders.cpp
-
+// Fragment shader source code to color particles based on their velocity for either blue or a "plasma"
 const char* fragmentShaderSource = R"(
 #version 330 core
 out vec4 FragColor;
@@ -30,7 +36,7 @@ uniform float vmin;
 uniform float vmax;
 uniform int colorMode; // 0 = Plasma, 1 = Blue
 
-// Existing Plasma Scheme
+// Plasma Color Scheme
 vec3 plasma(float t) {
     t = clamp(t, 0.0, 1.0);
     vec3 c0 = vec3(0.05, 0.03, 0.53);
@@ -45,7 +51,7 @@ vec3 plasma(float t) {
     else return mix(c3, c4, (t - 0.9) * 4.0);
 }
 
-// NEW: Blue Ocean Scheme
+// Blue Color Scheme
 vec3 ocean(float t) {
     t = clamp(t, 0.0, 1.0);
     // Dark Navy -> Azure -> White (Foam)
@@ -73,8 +79,7 @@ void main() {
 }
 )";
 
-// ---------------- INTERNAL HELPER ----------------
-
+// Compile the specified shader code
 GLuint compileShader(GLenum type, const char* source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
@@ -92,8 +97,7 @@ GLuint compileShader(GLenum type, const char* source) {
     return shader;
 }
 
-// ---------------- PUBLIC FUNCTION ----------------
-
+// Compile and link all shader code needed for the program
 GLuint createShaderProgram() {
     GLuint program = glCreateProgram();
     GLuint v = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
