@@ -3,6 +3,7 @@
     Last Date Modified: 12/1/25
     Description: Class to house common OpenGL operations using GLFW and input callback functions
 */
+#pragma once
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>

@@ -8,7 +8,12 @@
 #include <stdexcept>
 #include <iostream>
 
-// Constructor that initializes the necessary frameworks and creates a window to be stored in this class 
+/**
+ * @brief  Constructor that initializes the necessary frameworks and creates a window to be stored in this class
+ * 
+ * @param  width  width of the simulation window
+ * @param  height  height of the simulation window
+ */
 SimWindow::SimWindow(int width, int height) 
 {
     // Init glfw
@@ -23,7 +28,7 @@ SimWindow::SimWindow(int width, int height)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // Create a new window for the sim to run in
-    window = glfwCreateWindow(widht, height, "SPH Simulation", NULL, NULL);
+    window = glfwCreateWindow(width, height, "SPH Simulation", NULL, NULL);
     if (!window)
     {
         std::cerr << "Failed to create GLFW window" << std::endl;
