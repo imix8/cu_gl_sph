@@ -1,4 +1,5 @@
 /* 
+    Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
     Class: ECE6122 
     Last Date Modified: 12/1/25
     Description: Class header to house common OpenGL operations using GLFW
