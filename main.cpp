@@ -1,7 +1,7 @@
-/* 
+/*
     Authors: Ivan Mix, Jacob Dudik, Abhinav Vemulapalli, Nikola Rogers
-    Class: ECE6122 
-    Last Date Modified: 12/1/25
+    Class: ECE6122
+    Last Date Modified: 12/2/25
     Description: SPH Fluid Simulation Main Program
 */
 
@@ -38,7 +38,7 @@ AppState currentState = STATE_CONFIG;
 // The Master Parameter Struct
 SPHParams params;
 
-// Camera/Mouse Control Globals
+// Camera and Mouse Control Globals
 Camera cam;
 float lastX = 400, lastY = 300;
 bool firstMouse = true;
@@ -50,21 +50,24 @@ extern void ImGui_ImplGlfw_ScrollCallback(GLFWwindow *window, double xoffset, do
 
 /**
  * @brief Callback function to get the position of the mouse and rotate the camera accordingly
- * 
+ *
  * @param  window  program window
  * @param  xpos  x coordinate of the mouse
  * @param  ypos  y coordinate of the mouse
  */
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
+    // Callback object
     ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
 
+    // As long as the mouse exists, we can get the position
     if (firstMouse)
     {
         lastX = xpos;
         lastY = ypos;
         firstMouse = false;
     }
+    // Calculate position
     float xoffset = xpos - lastX;
     float yoffset = lastY - ypos;
     lastX = xpos;
@@ -75,6 +78,7 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
     {
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
+            // Rotation calculations
             float sensitivity = 0.5f;
             cam.cam_yaw += xoffset * sensitivity;
             cam.cam_pitch += yoffset * sensitivity;
@@ -86,6 +90,10 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
         }
     }
 }
+
+/**
+ * @brief  Callback function for the mouse button
+ */
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
     ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
@@ -96,8 +104,10 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
  */
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
+    // Callback object
     ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
 
+    // Handles the calculations for zooming
     if (!ImGui::GetIO().WantCaptureMouse && currentState == STATE_RUNNING)
     {
         cam.cam_dist -= (float)yoffset * 0.1f;
@@ -112,16 +122,17 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 
 /**
  * @brief  Create a sphere object in OpenGL
- * 
+ *
  * @param  verticies  global vector of all verticies to be drawn
  * @param  indicies  global vector of all indicides to be drawn
  */
 void createSphere(std::vector<float> &vertices, std::vector<unsigned int> &indices)
 {
+    // Necessary Constants
     const int X_SEGMENTS = 12;
     const int Y_SEGMENTS = 12;
     const float PI = 3.14159265359f;
-    
+
     // Create the verticies of the sphere
     for (int y = 0; y <= Y_SEGMENTS; ++y)
     {
@@ -143,11 +154,11 @@ void createSphere(std::vector<float> &vertices, std::vector<unsigned int> &indic
     {
         for (int x = 0; x < X_SEGMENTS; ++x)
         {
-            indices.push_back((y + 1) * (X_SEGMENTS + 1) +  x     );
-            indices.push_back( y      * (X_SEGMENTS + 1) +  x     );
-            indices.push_back( y      * (X_SEGMENTS + 1) + (x + 1));
-            indices.push_back((y + 1) * (X_SEGMENTS + 1) +  x     );
-            indices.push_back( y      * (X_SEGMENTS + 1) + (x + 1));
+            indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
+            indices.push_back(y * (X_SEGMENTS + 1) + x);
+            indices.push_back(y * (X_SEGMENTS + 1) + (x + 1));
+            indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
+            indices.push_back(y * (X_SEGMENTS + 1) + (x + 1));
             indices.push_back((y + 1) * (X_SEGMENTS + 1) + (x + 1));
         }
     }
@@ -155,17 +166,20 @@ void createSphere(std::vector<float> &vertices, std::vector<unsigned int> &indic
 
 /**
  * @brief  Create a wire-frame cylinder object in OpenGL
- * 
+ *
  * @param  verticies  global vector of all verticies to be drawn
  * @param  indicies  global vector of all indicides to be drawn
  */
-void createWireCylinder(std::vector<float>& vertices, std::vector<unsigned int>& indices) {
+void createWireCylinder(std::vector<float> &vertices, std::vector<unsigned int> &indices)
+{
+    // Necessary constants
     const int SEGMENTS = 24;
     const float PI = 3.14159265359f;
 
     // Create vertices for top and bottom rings
     for (int i = 0; i < SEGMENTS; i++)
     {
+        // Calculate the angle and x/y positions
         float angle = (float)i / SEGMENTS * 2.0f * PI;
         float x = cos(angle);
         float y = sin(angle);
@@ -184,6 +198,7 @@ void createWireCylinder(std::vector<float>& vertices, std::vector<unsigned int>&
     // Create side wall line indices
     for (int i = 0; i < SEGMENTS; i++)
     {
+        // Calculate base of cylinder
         int base = i * 2;
         int next = ((i + 1) % SEGMENTS) * 2;
 
@@ -194,9 +209,10 @@ void createWireCylinder(std::vector<float>& vertices, std::vector<unsigned int>&
         // Top Ring
         indices.push_back(base + 1);
         indices.push_back(next + 1);
-        
+
         // Vertical Connector (every 4th segment to keep it clean)
-        if (i % 4 == 0) {
+        if (i % 4 == 0)
+        {
             indices.push_back(base);
             indices.push_back(base + 1);
         }
@@ -214,7 +230,7 @@ int main()
 
     // Init the gui backend
     SimGui gui(&simWindow, &params, &cam);
-   
+
     // Debug info on GL driver (helps diagnose CUDA interop availability)
     const GLubyte *vendor = glGetString(GL_VENDOR);
     const GLubyte *renderer = glGetString(GL_RENDERER);
@@ -249,11 +265,13 @@ int main()
     std::vector<unsigned int> cylIndices;
     createWireCylinder(cylVerts, cylIndices);
 
+    // Set up CUDA graphics
     unsigned int VAO, VBO, EBO, VBO_Inst;
     unsigned int cylVAO, cylVBO, cylEBO;
     cudaGraphicsResource *instanceVBORes = nullptr;
     bool useInterop = true;
-    
+
+    // Create GPU Objects and Buffers
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
@@ -283,7 +301,7 @@ int main()
     glBufferData(GL_ARRAY_BUFFER, cylVerts.size() * sizeof(float), cylVerts.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cylEBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, cylIndices.size() * sizeof(int), cylIndices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1); // Enable Attr 1 for shader compatibility
 
@@ -309,6 +327,7 @@ int main()
         {
             host_data.resize(params.particle_count * 4);
 
+            // Create buffers
             glBindBuffer(GL_ARRAY_BUFFER, VBO_Inst);
             glBufferData(GL_ARRAY_BUFFER,
                          params.particle_count * sizeof(float) * 4, NULL,
@@ -348,25 +367,25 @@ int main()
             float ry = glm::radians(cam.cam_yaw);
             float rp = glm::radians(cam.cam_pitch);
             glm::vec3 pos = target + glm::vec3(
-                cam.cam_dist * cos(rp) * cos(ry),
-                cam.cam_dist * cos(rp) * sin(ry),
-                cam.cam_dist * sin(rp)
-            );
+                                         cam.cam_dist * cos(rp) * cos(ry),
+                                         cam.cam_dist * cos(rp) * sin(ry),
+                                         cam.cam_dist * sin(rp));
 
             glm::mat4 view = glm::lookAt(pos, target, glm::vec3(0, 0, 1));
-            
+
             glm::mat4 proj = glm::perspective(
-                glm::radians(45.0f),    // 45 degree FOV
-                (float)width / height,  // aspect ratio
-                0.1f,                   // near clipping plane
-                100.0f                  // far clipping plane
+                glm::radians(45.0f),   // 45 degree FOV
+                (float)width / height, // aspect ratio
+                0.1f,                  // near clipping plane
+                100.0f                 // far clipping plane
             );
 
             // ----------------------------------------------------
             // 2. Interaction Logic: Ray-Plane Intersection
             // ----------------------------------------------------
             params.is_interacting = 0;
-            if ((glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) && !ImGui::GetIO().WantCaptureMouse) {
+            if ((glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) && !ImGui::GetIO().WantCaptureMouse)
+            {
                 double mx, my;
                 glfwGetCursorPos(window, &mx, &my);
 
@@ -375,14 +394,12 @@ int main()
                     glm::vec3(mx, height - my, 0.0f),
                     view,
                     proj,
-                    glm::vec4(0, 0, width, height)
-                );
+                    glm::vec4(0, 0, width, height));
                 glm::vec3 end = glm::unProject(
                     glm::vec3(mx, height - my, 1.0f),
                     view,
                     proj,
-                    glm::vec4(0, 0, width, height)
-                );
+                    glm::vec4(0, 0, width, height));
                 glm::vec3 dir = glm::normalize(end - start);
 
                 // Plane Equation: Z = BoxSize / 2
@@ -391,10 +408,12 @@ int main()
                 glm::vec3 normal(0, 0, 1);
                 float denom = glm::dot(dir, normal);
 
-                if (std::abs(denom) > 0.0001f) {
+                if (std::abs(denom) > 0.0001f)
+                {
                     float t = glm::dot(glm::vec3(0, 0, planeZ) - start, normal) / denom;
 
-                    if (t >= 0) {
+                    if (t >= 0)
+                    {
                         glm::vec3 worldPos = start + dir * t;
 
                         // Clamp to box bounds
@@ -448,7 +467,8 @@ int main()
             // ----------------------------------------------------
             // 5. Render Interaction Cylinder (Wireframe)
             // ----------------------------------------------------
-            if (params.is_interacting) {
+            if (params.is_interacting)
+            {
                 // Set radius uniform to the interaction radius
                 glUniform1f(glGetUniformLocation(program, "radius"), params.interact_radius);
 
@@ -461,10 +481,11 @@ int main()
 
                 // Disable the instanced attribute array (Loc 1) so we can pass manual data via glVertexAttrib4f
                 glDisableVertexAttribArray(1);
-                glDisable(GL_DEPTH_TEST);  // Draw on top of fluid
+                glDisable(GL_DEPTH_TEST); // Draw on top of fluid
 
                 // Draw a stack of wire cylinders to visualize the stirring column
-                for (int k = 0; k < 10; k++) {
+                for (int k = 0; k < 10; k++)
+                {
                     float z = (params.box_size / 10.0f) * k;
                     glVertexAttrib4f(1, params.interact_x, params.interact_y, z, 1000.0f); // Pass vMag (1000.0f for bright color)
                     glDrawElements(GL_LINES, cylIndices.size(), GL_UNSIGNED_INT, 0);
