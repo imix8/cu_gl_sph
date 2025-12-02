@@ -530,7 +530,7 @@ int stepSimulation(cudaGraphicsResource *instanceVBORes, SPHParams *params, floa
         params->stiffness, params->restDensity);
     cudaDeviceSynchronize();
 
-    float3 mousePos = make_float3(params->interact_x, params->interact_y, params->interact_z);
+    float3 mousePos = make_float3(params->interactX, params->interactY, params->interactZ);
 
     // Run the forces kernel on the points
     compute_forces_and_integrate<<<gridSize, BLOCK_SIZE>>>(
@@ -636,7 +636,7 @@ int stepSimulationFallback(float *hostRenderBuffer, SPHParams *params, float *ou
         params->stiffness, params->restDensity);
     cudaDeviceSynchronize();
 
-    float3 mousePos = make_float3(params->interact_x, params->interact_y, params->interact_z);
+    float3 mousePos = make_float3(params->interactX, params->interactY, params->interactZ);
 
     compute_forces_and_integrate<<<gridSize, BLOCK_SIZE>>>(
         dParticles, allocatedParticles, params->h, params->mass, params->dt,

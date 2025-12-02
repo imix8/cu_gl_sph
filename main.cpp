@@ -307,7 +307,7 @@ int main()
 
     glEnable(GL_DEPTH_TEST);
 
-    std::vector<float> host_data; // no longer used for uploads; kept for sizing state
+    std::vector<float> hostData; // no longer used for uploads; kept for sizing state
 
     // ----------------------------------------------------
     //  Main Loop
@@ -325,7 +325,7 @@ int main()
         // ----------------------------------------------------
         if (currentState == STATE_CONFIG && gui.displayConfigGui())
         {
-            host_data.resize(params.particleCount * 4);
+            hostData.resize(params.particleCount * 4);
 
             // Create buffers
             glBindBuffer(GL_ARRAY_BUFFER, VBOInst);
@@ -383,7 +383,7 @@ int main()
             // ----------------------------------------------------
             // 2. Interaction Logic: Ray-Plane Intersection
             // ----------------------------------------------------
-            params.is_interacting = 0;
+            params.isInteracting = 0;
             if ((glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) && !ImGui::GetIO().WantCaptureMouse)
             {
                 double mx, my;
@@ -417,11 +417,11 @@ int main()
                         glm::vec3 worldPos = start + dir * t;
 
                         // Clamp to box bounds
-                        params.interact_x = glm::clamp(worldPos.x, 0.0f, params.boxSize);
-                        params.interact_y = glm::clamp(worldPos.y, 0.0f, params.boxSize);
-                        params.interact_z = glm::clamp(worldPos.z, 0.0f, params.boxSize);
+                        params.interactX = glm::clamp(worldPos.x, 0.0f, params.boxSize);
+                        params.interactY = glm::clamp(worldPos.y, 0.0f, params.boxSize);
+                        params.interactZ = glm::clamp(worldPos.z, 0.0f, params.boxSize);
 
-                        params.is_interacting = 1;
+                        params.isInteracting = 1;
                     }
                 }
             }
@@ -442,9 +442,9 @@ int main()
             else
             {
                 // Fallback path: compute and upload via CPU
-                count = stepSimulationFallback(host_data.data(), &params, &cmin, &cmax);
+                count = stepSimulationFallback(hostData.data(), &params, &cmin, &cmax);
                 glBindBuffer(GL_ARRAY_BUFFER, VBOInst);
-                glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4, host_data.data());
+                glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(float) * 4, hostData.data());
             }
 
             // ----------------------------------------------------
@@ -467,7 +467,7 @@ int main()
             // ----------------------------------------------------
             // 5. Render Interaction Cylinder (Wireframe)
             // ----------------------------------------------------
-            if (params.is_interacting)
+            if (params.isInteracting)
             {
                 // Set radius uniform to the interaction radius
                 glUniform1f(glGetUniformLocation(program, "radius"), params.interactRadius);
@@ -487,7 +487,7 @@ int main()
                 for (int k = 0; k < 10; k++)
                 {
                     float z = (params.boxSize / 10.0f) * k;
-                    glVertexAttrib4f(1, params.interact_x, params.interact_y, z, 1000.0f); // Pass vMag (1000.0f for bright color)
+                    glVertexAttrib4f(1, params.interactX, params.interactY, z, 1000.0f); // Pass vMag (1000.0f for bright color)
                     glDrawElements(GL_LINES, cylIndices.size(), GL_UNSIGNED_INT, 0);
                 }
 
