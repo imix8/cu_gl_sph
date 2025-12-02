@@ -26,7 +26,7 @@ SimGui::SimGui(SimWindow *window, SPHParams *params, Camera *cam)
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window->getWindow(), true);
-    ImGui_ImplOpenGL3_Init(window->glsl_version);
+    ImGui_ImplOpenGL3_Init(window->glslVersion);
 }
 
 /**

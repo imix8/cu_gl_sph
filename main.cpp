@@ -81,12 +81,12 @@ void mouseCallback(GLFWwindow *window, double xpos, double ypos)
             // Rotation calculations
             float sensitivity = 0.5f;
             cam.camYaw += xoffset * sensitivity;
-            cam.camPItch += yoffset * sensitivity;
+            cam.camPitch += yoffset * sensitivity;
 
-            if (cam.camPItch > 89.0f)
-                cam.camPItch = 89.0f;
-            if (cam.camPItch < -89.0f)
-                cam.camPItch = -89.0f;
+            if (cam.camPitch > 89.0f)
+                cam.camPitch = 89.0f;
+            if (cam.camPitch < -89.0f)
+                cam.camPitch = -89.0f;
         }
     }
 }
@@ -365,7 +365,7 @@ int main()
 
             glm::vec3 target(params.boxSize / 2.0f, params.boxSize / 2.0f, params.boxSize / 2.0f);
             float ry = glm::radians(cam.camYaw);
-            float rp = glm::radians(cam.camPItch);
+            float rp = glm::radians(cam.camPitch);
             glm::vec3 pos = target + glm::vec3(
                                          cam.camDist * cos(rp) * cos(ry),
                                          cam.camDist * cos(rp) * sin(ry),
