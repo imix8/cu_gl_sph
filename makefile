@@ -150,6 +150,29 @@ clean:
 	rm -f *.lib
 	rm -f *.exp
 
+setup:
+	# Create imgui directory
+	mkdir -p imgui
+
+	# Download Core ImGui files
+	wget -O imgui/imgui.h 			https://raw.githubusercontent.com/ocornut/imgui/master/imgui.h
+	wget -O imgui/imgui.cpp 		https://raw.githubusercontent.com/ocornut/imgui/master/imgui.cpp
+	wget -O imgui/imgui_draw.cpp 	https://raw.githubusercontent.com/ocornut/imgui/master/imgui_draw.cpp
+	wget -O imgui/imgui_tables.cpp 	https://raw.githubusercontent.com/ocornut/imgui/master/imgui_tables.cpp
+	wget -O imgui/imgui_widgets.cpp	https://raw.githubusercontent.com/ocornut/imgui/master/imgui_widgets.cpp
+	wget -O imgui/imconfig.h		https://raw.githubusercontent.com/ocornut/imgui/master/imconfig.h
+	wget -O imgui/imgui_internal.h	https://raw.githubusercontent.com/ocornut/imgui/master/imgui_internal.h
+	wget -O imgui/imstb_rectpack.h	https://raw.githubusercontent.com/ocornut/imgui/master/imstb_rectpack.h
+	wget -O imgui/imstb_textedit.h	https://raw.githubusercontent.com/ocornut/imgui/master/imstb_textedit.h
+	wget -O imgui/imstb_truetype.h	https://raw.githubusercontent.com/ocornut/imgui/master/imstb_truetype.h
+
+	# Download Backends (GLFW and OpenGL3)
+	wget -O imgui/imgui_impl_glfw.h				https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.h
+	wget -O imgui/imgui_impl_glfw.cpp			https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_glfw.cpp
+	wget -O imgui/imgui_impl_opengl3.h			https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.h
+	wget -O imgui/imgui_impl_opengl3.cpp		https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3.cpp
+	wget -O imgui/imgui_impl_opengl3_loader.h 	https://raw.githubusercontent.com/ocornut/imgui/master/backends/imgui_impl_opengl3_loader.h
+
 run: all
 	./$(TARGET)
 
