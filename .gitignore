@@ -4,7 +4,6 @@ simple_sph
 
 # --- Build Outputs (Windows) ---
 *.obj
-*.exe
 *.exp
 *.lib
 *.pdb
