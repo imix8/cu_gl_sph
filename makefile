@@ -81,7 +81,8 @@ else
     CXXFLAGS := -O3 -std=c++14 -Wall $(INCLUDES) -DGLFW_EXPOSE_NATIVE_X11 -DGLFW_EXPOSE_NATIVE_GLX -DGLEW_STATIC
     NVCCFLAGS_WIN := 
     
-    LDFLAGS := -lGL -lGLEW -lglfw -lX11 -lXi -lXrandr -lXinerama -lXcursor -lpthread -lcudart
+    # Link against the locally built GLFW static library and system GL deps
+    LDFLAGS := -L$(GLFW_LIB_DIR) -lglfw3 -lGL -lGLEW -lX11 -lXi -lXrandr -lXinerama -lXcursor -lpthread -lcudart
     
     COMPILE_CPP = $(CXX) $(CXXFLAGS) -c $< -o $@
     
