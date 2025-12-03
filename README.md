@@ -1,5 +1,7 @@
 # CUDA SPH Fluid Simulation
 
+The resources folder contains a video of the program running PACE-ICE. The resources folder also contains the report for the project.
+
 A real-time Smoothed Particle Hydrodynamics (SPH) fluid simulation implemented in CUDA C++. The simulation is visualized using OpenGL (instanced rendering) and features an interactive configuration GUI powered by Dear ImGui.
 
 ## Project Roadmap & Goals
@@ -28,6 +30,7 @@ Before setting up, ensure you have the necessary development libraries installed
 ```bash
 sudo apt-get update
 sudo apt-get install build-essential cmake libglm-dev libglew-dev libglfw3-dev
+sudo apt-get install libxinerama-dev libxcursor-dev libxi-dev libxrandr-dev
 ```
 
 ---
@@ -51,16 +54,7 @@ make
 make run
 ```
 
----
-
-## Controls
-
-- GUI: Use the setup window to configure particle count and time step.
-- Camera: Left Click + Drag to rotate. Scroll to zoom.
-- Simulation: Click START to begin physics. Click STOP/RESET to re-configure.
-
-
-## Building and working on PACE-ICE
+## Building and working with CUDA-OpenGL Interop on PACE-ICE
 Before provisioning yourself a desktop on PACE-ICE, make sure the "Hardware (GPU) Rendering" option is selected.
 Also make sure that you are requesting a desktop with access to the GPU. Once you have access to the GUI, open the terminal
 and run the following commands:
@@ -71,3 +65,11 @@ make -j$(nproc)
 ```
 
 After the program has built, run it with `vglrun -d egl ./simple_sph`
+
+---
+
+## Controls
+
+- GUI: Use the setup window to configure particle count and time step.
+- Camera: Left Click + Drag to rotate. Scroll to zoom.
+- Simulation: Click START to begin physics. Click STOP/RESET to re-configure.
